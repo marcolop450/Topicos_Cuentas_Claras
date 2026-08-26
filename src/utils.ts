@@ -1,10 +1,17 @@
+export type Group = {
+  id: string;
+  name: string;
+};
+
 export type Participant = {
   id: string;
+  group_id: string;
   name: string;
 };
 
 export type Expense = {
   id: string;
+  group_id: string;
   description: string;
   amount: number;
   payer_id: string;
