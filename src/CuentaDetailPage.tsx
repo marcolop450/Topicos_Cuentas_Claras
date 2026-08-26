@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit } from './utils';
-import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon } from 'lucide-react';
+import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon, ArrowRight, PieChart } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 
 export default function CuentaDetailPage() {
@@ -58,7 +58,6 @@ export default function CuentaDetailPage() {
   }
 
   function handleDeleteParticipant(participant: Participant) {
-    // Check if participant has a negative balance (owes money)
     const balances = calculateBalances(participants, expenses, splits);
     const balance = balances.find(b => b.participantId === participant.id);
 
@@ -67,7 +66,6 @@ export default function CuentaDetailPage() {
       return;
     }
 
-    // Check if participant is payer of any expense
     const isPayerOfExpense = expenses.some(exp => exp.payer_id === participant.id);
     if (isPayerOfExpense) {
       setFormError(`No se puede eliminar a "${participant.name}" porque es pagador de uno o mas gastos. Elimina esos gastos primero.`);
@@ -144,6 +142,10 @@ export default function CuentaDetailPage() {
   const balanceSum = balances.reduce((sum, b) => sum + b.balance, 0);
   const isBalanceZero = Math.abs(balanceSum) < 0.01;
 
+  // Resumen Data
+  const totalGasto = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const promedioPersona = participants.length > 0 ? totalGasto / participants.length : 0;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
@@ -159,6 +161,8 @@ export default function CuentaDetailPage() {
     { key: 'balances' as const, label: 'Liquidacion', icon: <Calculator size={16} /> },
   ];
 
+  const allSelected = participants.length > 0 && selectedParticipants.length === participants.length;
+
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
       <Navbar backLabel="Mis cuentas" backTo="/cuentas" />
@@ -166,14 +170,27 @@ export default function CuentaDetailPage() {
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 pb-12 animate-fade-in">
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500">
-            <FolderOpen size={24} />
+        {/* Header con Resumen (Nueva Funcionalidad) */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500">
+              <FolderOpen size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-[var(--text-primary)]">{group?.name}</h1>
+              <p className="text-xs text-[var(--text-muted)]">{participants.length} participantes / {expenses.length} gastos</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">{group?.name}</h1>
-            <p className="text-xs text-[var(--text-muted)]">{participants.length} participantes / {expenses.length} gastos</p>
+          
+          <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl divide-x divide-[var(--border)] overflow-hidden shadow-sm">
+            <div className="px-4 py-2 flex flex-col justify-center">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Gasto Total</span>
+              <span className="text-sm font-bold text-[var(--text-primary)]">Bs. {totalGasto.toFixed(2)}</span>
+            </div>
+            <div className="px-4 py-2 flex flex-col justify-center">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Promedio / Persona</span>
+              <span className="text-sm font-bold text-[var(--text-primary)]">Bs. {promedioPersona.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 
@@ -189,7 +206,7 @@ export default function CuentaDetailPage() {
         {/* PARTICIPANTES */}
         {activeTab === 'participants' && (
           <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl transition-colors">
-            <div className="p-5 border-b border-[var(--border)]">
+            <div className="p-4 sm:p-5 border-b border-[var(--border)]">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">Agregar Participante</h2>
               <form onSubmit={addParticipant}>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -201,7 +218,7 @@ export default function CuentaDetailPage() {
                 <FormError message={formError} />
               </form>
             </div>
-            <div className="p-5">
+            <div className="p-4 sm:p-5">
               <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider mb-3">Participantes ({participants.length})</p>
               {participants.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)] text-center py-4">Sin participantes</p>
@@ -212,10 +229,10 @@ export default function CuentaDetailPage() {
                     const hasDebt = pBalance && pBalance.balance < -0.01;
                     return (
                       <li key={p.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] group/p transition-colors">
-                        <span className="text-sm font-medium text-[var(--text-primary)]">{p.name}</span>
+                        <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{p.name}</span>
                         <button
                           onClick={() => handleDeleteParticipant(p)}
-                          className={`p-1 rounded-md transition-all opacity-0 group-hover/p:opacity-100 ${hasDebt ? 'text-[var(--text-muted)] cursor-not-allowed' : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'}`}
+                          className={`p-1 rounded-md transition-all sm:opacity-0 group-hover/p:opacity-100 ${hasDebt ? 'text-[var(--text-muted)] cursor-not-allowed' : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'}`}
                           title={hasDebt ? 'No se puede eliminar: tiene deuda' : 'Eliminar'}
                         >
                           {hasDebt ? <AlertCircle size={14} /> : <XIcon size={14} />}
@@ -233,7 +250,7 @@ export default function CuentaDetailPage() {
         {activeTab === 'expenses' && (
           <div className="grid lg:grid-cols-5 gap-4">
             {/* Form */}
-            <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 h-fit transition-colors">
+            <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 h-fit transition-colors">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">{editingExpenseId ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
               <form onSubmit={saveExpense} className="space-y-3">
                 <FormError message={formError} />
@@ -255,9 +272,15 @@ export default function CuentaDetailPage() {
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-medium text-[var(--text-secondary)]">Dividir entre</label>
-                    <button type="button" onClick={() => setSelectedParticipants(participants.map(p => p.id))} className="text-xs text-indigo-500 hover:underline font-medium">Todos</button>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedParticipants(allSelected ? [] : participants.map(p => p.id))} 
+                      className="text-xs text-indigo-500 hover:underline font-medium"
+                    >
+                      {allSelected ? 'Deseleccionar todos' : 'Todos'}
+                    </button>
                   </div>
-                  <div className="space-y-0.5 max-h-32 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)]">
+                  <div className="space-y-0.5 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)] custom-scrollbar">
                     {participants.length === 0 && <p className="text-xs text-[var(--text-muted)] text-center py-2">Agrega participantes primero</p>}
                     {participants.map(p => (
                       <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 hover:bg-[var(--bg-card)] rounded-md transition-colors">
@@ -265,7 +288,7 @@ export default function CuentaDetailPage() {
                           if (e.target.checked) setSelectedParticipants([...selectedParticipants, p.id]);
                           else setSelectedParticipants(selectedParticipants.filter(sid => sid !== p.id));
                         }} className="rounded text-indigo-500 focus:ring-indigo-500 w-3.5 h-3.5" />
-                        <span className="text-[var(--text-primary)]">{p.name}</span>
+                        <span className="text-[var(--text-primary)] truncate">{p.name}</span>
                       </label>
                     ))}
                   </div>
@@ -282,7 +305,7 @@ export default function CuentaDetailPage() {
             </div>
 
             {/* List */}
-            <div className="lg:col-span-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 transition-colors">
+            <div className="lg:col-span-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">Historial</h2>
               {expenses.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-lg">
@@ -296,11 +319,11 @@ export default function CuentaDetailPage() {
                     const expSplits = splits.filter(s => s.expense_id === exp.id);
                     return (
                       <div key={exp.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 rounded-lg border border-[var(--border)] hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-colors group gap-2">
-                        <div>
-                          <p className="font-medium text-[var(--text-primary)] text-sm">{exp.description}</p>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5">{payer} pago <span className="font-semibold text-[var(--text-primary)]">Bs. {exp.amount}</span> -- {expSplits.length} pers.</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-[var(--text-primary)] text-sm truncate">{exp.description}</p>
+                          <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">{payer} pago <span className="font-semibold text-[var(--text-primary)]">Bs. {exp.amount}</span> -- {expSplits.length} pers.</p>
                         </div>
-                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-center">
+                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-center shrink-0">
                           <button onClick={() => startEditExpense(exp)} className="text-indigo-400 hover:text-indigo-600 p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors" title="Editar"><Edit2 size={14} /></button>
                           <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Eliminar"><Trash2 size={14} /></button>
                         </div>
@@ -317,7 +340,7 @@ export default function CuentaDetailPage() {
         {activeTab === 'balances' && (
           <div className="grid md:grid-cols-2 gap-4">
             {/* Balances */}
-            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 transition-colors">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-base font-semibold text-[var(--text-primary)]">Balances</h2>
                 {!isBalanceZero && <span className="text-xs bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 px-2 py-1 rounded-full font-medium"><AlertCircle size={10} className="inline mr-1" />Error: {balanceSum.toFixed(2)}</span>}
@@ -325,8 +348,8 @@ export default function CuentaDetailPage() {
               <ul className="space-y-2">
                 {balances.map(b => (
                   <li key={b.participantId} className="flex justify-between items-center p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
-                    <span className="text-sm font-medium text-[var(--text-primary)]">{b.name}</span>
-                    <span className={`text-sm font-bold ${b.balance > 0 ? 'text-emerald-500' : b.balance < 0 ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
+                    <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{b.name}</span>
+                    <span className={`text-sm font-bold shrink-0 ${b.balance > 0 ? 'text-emerald-500' : b.balance < 0 ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
                       {b.balance > 0 ? '+' : ''}{b.balance.toFixed(2)} Bs.
                     </span>
                   </li>
@@ -341,7 +364,7 @@ export default function CuentaDetailPage() {
             </div>
 
             {/* Settlements */}
-            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 transition-colors">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Transferencias</h2>
               {settlements.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-lg">
@@ -349,15 +372,18 @@ export default function CuentaDetailPage() {
                   <p className="text-xs text-[var(--text-muted)] mt-1">No hay deudas pendientes</p>
                 </div>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {settlements.map((t, i) => (
-                    <li key={i} className="flex items-center gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
-                      <span className="text-sm font-semibold text-red-500 flex-1 text-right">{t.from}</span>
-                      <div className="flex flex-col items-center px-2">
-                        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">paga</span>
-                        <span className="text-sm font-bold text-[var(--text-primary)] bg-[var(--bg-card)] px-2 py-0.5 rounded-md border border-[var(--border)]">Bs. {t.amount.toFixed(2)}</span>
+                    <li key={i} className="flex items-center justify-between gap-2 p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
+                      <span className="text-sm font-semibold text-red-500 flex-1 truncate text-right">{t.from}</span>
+                      <div className="flex flex-col items-center shrink-0">
+                        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">paga</span>
+                        <div className="flex items-center gap-1.5 bg-[var(--bg-card)] px-2.5 py-1 rounded-md border border-[var(--border)]">
+                          <span className="text-sm font-bold text-[var(--text-primary)] whitespace-nowrap">Bs. {t.amount.toFixed(2)}</span>
+                          <ArrowRight size={14} className="text-[var(--text-muted)]" />
+                        </div>
                       </div>
-                      <span className="text-sm font-semibold text-emerald-500 flex-1">a {t.to}</span>
+                      <span className="text-sm font-semibold text-emerald-500 flex-1 truncate text-left">{t.to}</span>
                     </li>
                   ))}
                 </ul>
