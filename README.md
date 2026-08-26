@@ -39,3 +39,8 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 ## 2026-08-26 13:03:42
 **Modelo**: Claude Opus 4.6 (Thinking)
 **Mensaje**: Bueno vamos con las ultimas Mejoras primero ese Scroll dise�ar bien en el cambio de Color y que se pueda selecionar Todos y Deseleccionar, Ponele una Flecha al quien debe, Lo subire a Vercel asi que dime que hacer paso a paso y mejora todo Responsivo y vos sorprendeme con una nueva funcionalidad que no afecte a la aplicacion sino le de algo mas de vida
+
+
+## 2026-08-26 13:10:21
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Vale arregla o mejor solo que quede el Gasto Total ya que promedio recordar que hay que gente paga pero le devuelven correctamente, pon otra sorpresa mejor que no se vea que fregue la Logica
