@@ -1,6 +1,41 @@
-import { Calculator, AlertCircle, X } from 'lucide-react';
+import { Calculator, AlertCircle, X, Sun, Moon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
+
+/* ===== THEME CONTEXT ===== */
+
+type Theme = 'light' | 'dark';
+
+const ThemeContext = createContext<{
+  theme: Theme;
+  toggleTheme: () => void;
+}>({ theme: 'light', toggleTheme: () => {} });
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('cc-theme');
+    return (saved === 'dark' ? 'dark' : 'light') as Theme;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('cc-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  return useContext(ThemeContext);
+}
+
+/* ===== NAVBAR ===== */
 
 interface NavbarProps {
   backLabel?: string;
@@ -9,62 +44,68 @@ interface NavbarProps {
 
 export function Navbar({ backLabel, backTo }: NavbarProps) {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 md:px-8 py-5 rounded-b-2xl mb-6">
+    <div className="bg-[var(--bg-card)] border-b border-[var(--border)] px-4 md:px-8 py-4 mb-6 transition-colors">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 group">
-          <div className="bg-blue-500 p-2 rounded-xl group-hover:bg-blue-400 transition-colors">
-            <Calculator size={22} className="text-white" />
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <div className="bg-indigo-500 p-1.5 rounded-lg">
+            <Calculator size={20} className="text-white" />
           </div>
-          <span className="text-xl font-bold text-white tracking-tight">Cuentas Claras</span>
+          <span className="text-lg font-semibold text-[var(--text-primary)] tracking-tight">Cuentas Claras</span>
         </Link>
-        {backLabel && backTo && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(backTo)}
-            className="flex items-center gap-1 text-blue-300 hover:text-white transition-colors text-sm"
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
+            title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}
           >
-            {backLabel}
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-        )}
+          {backLabel && backTo && (
+            <button
+              onClick={() => navigate(backTo)}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium"
+            >
+              {backLabel}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+/* ===== CONFIRM MODAL ===== */
 
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
   message: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: ConfirmModalProps) {
+export function ConfirmModal({ isOpen, title, message, confirmLabel = 'Eliminar', onConfirm, onCancel }: ConfirmModalProps) {
   if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={24} />
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-[var(--bg-card)] rounded-xl shadow-xl max-w-sm w-full p-6 border border-[var(--border)] animate-fade-in">
+        <div className="flex justify-between items-start mb-3">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
+          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+            <X size={20} />
           </button>
         </div>
-        <p className="text-gray-600 mb-6">{message}</p>
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 font-medium rounded-xl transition-colors"
-          >
+        <p className="text-sm text-[var(--text-secondary)] mb-5">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] font-medium rounded-lg transition-colors">
             Cancelar
           </button>
-          <button
-            onClick={onConfirm}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors"
-          >
-            Eliminar
+          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -72,20 +113,19 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
   );
 }
 
-interface FormErrorProps {
-  message: string | null;
-}
+/* ===== FORM ERROR ===== */
 
-export function FormError({ message }: FormErrorProps) {
+export function FormError({ message }: { message: string | null }) {
   if (!message) return null;
-
   return (
-    <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm flex gap-2 items-start border border-red-200 animate-fade-in-up">
+    <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex gap-2 items-start border border-red-200 dark:border-red-500/20 mt-2 animate-fade-in">
       <AlertCircle size={16} className="shrink-0 mt-0.5" />
       <span>{message}</span>
     </div>
   );
 }
+
+/* ===== HOOK ===== */
 
 export function useConfirmModal() {
   const [modal, setModal] = useState<{
@@ -96,15 +136,7 @@ export function useConfirmModal() {
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   function showConfirm(title: string, message: string, onConfirm: () => void) {
-    setModal({
-      isOpen: true,
-      title,
-      message,
-      onConfirm: () => {
-        onConfirm();
-        setModal(prev => ({ ...prev, isOpen: false }));
-      },
-    });
+    setModal({ isOpen: true, title, message, onConfirm: () => { onConfirm(); setModal(prev => ({ ...prev, isOpen: false })); } });
   }
 
   function closeConfirm() {

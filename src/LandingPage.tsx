@@ -1,104 +1,78 @@
 import { useNavigate } from 'react-router-dom';
-import { Users, Receipt, BarChart3, ArrowRight, Shield, Calculator } from 'lucide-react';
+import { ArrowRight, Shield, Users, Receipt, BarChart3, Calculator, Sun, Moon } from 'lucide-react';
+import { useTheme } from './components';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white overflow-hidden">
+    <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
 
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute top-1/2 -left-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-float delay-300"></div>
-        <div className="absolute -bottom-40 right-1/3 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-float delay-600"></div>
-      </div>
-
-      {/* Header */}
-      <nav className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-500 p-2 rounded-xl">
-            <Calculator size={24} className="text-white" />
+      {/* Nav */}
+      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2.5">
+          <div className="bg-indigo-500 p-1.5 rounded-lg">
+            <Calculator size={20} className="text-white" />
           </div>
-          <span className="text-xl font-bold tracking-tight">Cuentas Claras</span>
+          <span className="text-lg font-semibold text-[var(--text-primary)] tracking-tight">Cuentas Claras</span>
         </div>
-        <button
-          onClick={() => navigate('/cuentas')}
-          className="text-blue-300 hover:text-white transition-colors text-sm font-medium border border-blue-400/30 px-4 py-2 rounded-lg hover:border-blue-400/60"
-        >
-          Ir a mis cuentas
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors" title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <button onClick={() => navigate('/cuentas')} className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors">
+            Ir a mis cuentas
+          </button>
+        </div>
       </nav>
 
-      {/* Hero Section */}
-      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-12 md:pt-24 pb-16">
-        <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/10 rounded-full px-4 py-2 text-sm text-blue-200 mb-8 animate-fade-in-up">
+      {/* Hero */}
+      <div className="flex flex-col items-center text-center px-6 pt-16 md:pt-28 pb-20 animate-fade-in">
+        <div className="inline-flex items-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-full px-4 py-1.5 text-sm text-indigo-600 dark:text-indigo-400 font-medium mb-6">
           <Shield size={14} />
-          <span>Calculos exactos, sin errores de redondeo</span>
+          <span>Calculos exactos sin errores de redondeo</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold leading-tight max-w-4xl mb-6 animate-fade-in-up delay-100">
-          Divide gastos
-          <span className="block bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-300 bg-clip-text text-transparent">
-            sin complicaciones
-          </span>
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight max-w-3xl mb-5 text-[var(--text-primary)]">
+          Divide gastos,{' '}
+          <span className="text-indigo-500">queda a mano</span>
         </h1>
 
-        <p className="text-lg md:text-xl text-slate-300 max-w-2xl mb-10 leading-relaxed animate-fade-in-up delay-200">
-          Registra los gastos compartidos entre amigos, familia o compañeros de trabajo.
-          La aplicacion calcula automaticamente cuanto debe cada quien y genera las
-          transferencias exactas para quedar a mano.
+        <p className="text-base md:text-lg text-[var(--text-secondary)] max-w-xl mb-8 leading-relaxed">
+          Registra gastos compartidos entre amigos, familia o colegas.
+          La app calcula quien debe cuanto y genera las transferencias minimas para saldar deudas.
         </p>
 
         <button
           onClick={() => navigate('/cuentas')}
-          className="group relative bg-blue-600 hover:bg-blue-500 text-white font-semibold text-lg px-8 py-4 rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 flex items-center gap-3 animate-fade-in-up delay-300 animate-pulse-glow"
+          className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium text-base px-6 py-3 rounded-lg transition-colors flex items-center gap-2"
         >
-          Comenzar ahora
-          <ArrowRight size={20} className="transition-transform group-hover:translate-x-1" />
+          Comenzar
+          <ArrowRight size={18} />
         </button>
       </div>
 
-      {/* Features Section */}
-      <div className="relative z-10 max-w-6xl mx-auto px-6 pb-24">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1 animate-fade-in-up delay-400">
-            <div className="bg-blue-500/20 w-12 h-12 rounded-xl flex items-center justify-center mb-4">
-              <Users size={24} className="text-blue-400" />
+      {/* Features */}
+      <div className="max-w-4xl mx-auto px-6 pb-20">
+        <div className="grid sm:grid-cols-3 gap-4">
+          {[
+            { icon: <Users size={22} className="text-indigo-500" />, title: 'Participantes', desc: 'Agrega personas y decide quien participa en cada gasto.' },
+            { icon: <Receipt size={22} className="text-emerald-500" />, title: 'Gastos', desc: 'Registra, edita y elimina gastos con total control.' },
+            { icon: <BarChart3 size={22} className="text-amber-500" />, title: 'Liquidacion', desc: 'Calculo automatico de transferencias minimas.' },
+          ].map((f, i) => (
+            <div key={i} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 transition-colors">
+              <div className="mb-3">{f.icon}</div>
+              <h3 className="font-semibold text-[var(--text-primary)] mb-1">{f.title}</h3>
+              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{f.desc}</p>
             </div>
-            <h3 className="text-lg font-semibold mb-2">Participantes flexibles</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Agrega a las personas que participan. Cada gasto puede dividirse entre todos o solo algunos del grupo.
-            </p>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1 animate-fade-in-up delay-500">
-            <div className="bg-cyan-500/20 w-12 h-12 rounded-xl flex items-center justify-center mb-4">
-              <Receipt size={24} className="text-cyan-400" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Registro de gastos</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Registra cada gasto con su descripcion, monto y quien lo pago. Edita o elimina en cualquier momento.
-            </p>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1 animate-fade-in-up delay-600 sm:col-span-2 lg:col-span-1">
-            <div className="bg-indigo-500/20 w-12 h-12 rounded-xl flex items-center justify-center mb-4">
-              <BarChart3 size={24} className="text-indigo-400" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Liquidacion inteligente</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              La app calcula los balances y genera la menor cantidad de transferencias necesarias para saldar todas las deudas.
-            </p>
-          </div>
-
+          ))}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="relative z-10 border-t border-white/10 py-6 text-center text-sm text-slate-500 animate-fade-in delay-700">
-        Cuentas Claras — Distribuye gastos de manera justa y transparente
+      <div className="border-t border-[var(--border)] py-5 text-center text-xs text-[var(--text-muted)]">
+        Cuentas Claras — Distribuye gastos de manera justa
       </div>
     </div>
   );

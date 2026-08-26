@@ -12,12 +12,12 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 
 ## 2026-08-26 12:01:21
 **Modelo**: Gemini 3.1 Pro (High)
-**Mensaje**: Primera Pruebas estoy Haciendo con el Escenario de Ejemplo Cuatro amigos... (usuario reporta supuesto fallo en c�lculo con im�genes adjuntas)
+**Mensaje**: Primera Pruebas estoy Haciendo con el Escenario de Ejemplo Cuatro amigos... (usuario reporta supuesto fallo en c�lculo con im�genes adjuntas)
 
 
 ## 2026-08-26 12:08:57
 **Modelo**: Gemini 3.1 Pro (High)
-**Mensaje**: Buena dame comando para Limpiar la BD, y quiero que se aumente lo siguiente: Primero un Registro (Historial) para guardar las cuentas claras, que se pueda iniciar otras cuentas para poder A�adir una cuenta nueva con nuevas Personas, No usar Emojis, y tambien que el Titulo sea mas Global que no se refiera a solo de Viajes, y Frontend Responsivo si es que falta, Si hay que modificar la BD avisas nomas que es lo nuevo, borrar o limpiar}
+**Mensaje**: Buena dame comando para Limpiar la BD, y quiero que se aumente lo siguiente: Primero un Registro (Historial) para guardar las cuentas claras, que se pueda iniciar otras cuentas para poder A�adir una cuenta nueva con nuevas Personas, No usar Emojis, y tambien que el Titulo sea mas Global que no se refiera a solo de Viajes, y Frontend Responsivo si es que falta, Si hay que modificar la BD avisas nomas que es lo nuevo, borrar o limpiar}
 
 
 ## 2026-08-26 12:25:27
@@ -27,10 +27,12 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 
 ## 2026-08-26 12:34:32
 **Modelo**: Claude Opus 4.6 (Thinking)
-**Mensaje**: Perfecto, Me gusta se ve que trabaja, mantenelo Funcional lo que quiero es un dise�o Moderno, Un Titulo de presentacion dando un inicio con un resumen del Programa, Bonito luego para entrar al programa, Recordar Sin emojis y guardando la Bitacora los promts
+**Mensaje**: Perfecto, Me gusta se ve que trabaja, mantenelo Funcional lo que quiero es un diseño Moderno, Un Titulo de presentacion dando un inicio con un resumen del Programa, Bonito luego para entrar al programa, Recordar Sin emojis y guardando la Bitacora los promts
 
-
-## 2026-08-26 12:40:23
+## 2026-08-26 12:43:12
 **Modelo**: Claude Opus 4.6 (Thinking)
-**Mensaje**: Regla de Oro: Dividir en Varias Paginas (Direcciones de Archivo) no todo en localHost:XXXX sino LocalHost:XXXX/Landing, /index, /NombredelaCuenta y falto el dise�o alas otras Paginas, Metele animaciones igual
+**Mensaje**: Regla de Oro: Dividir en Varias Paginas (Direcciones de Archivo) no todo en localHost:XXXX sino LocalHost:XXXX/Landing,  /index, /NombredelaCuenta y falto el diseño alas otras Paginas, Metele animaciones igual
 
+## 2026-08-26 12:52:45
+**Modelo**: Claude Opus 4.6 (Thinking)
+**Mensaje**:Te falto añadir el anterior Promt, que se pueda eliminar Participantes y no se puede eliminar si ya presenta una Deuda (Negativo numero), bajale las Animaciones y como indique a todas las pantallas cambiale el Diseño no Moderno mejor Minimalista con colores que hacen referencia a una APP de Pagos y que tenga Modo Ligth y Modo Oscuro y este es el Git donde se guarda el Proyecto: https://github.com/marcolop450/Topicos_Cuentas_Claras.git

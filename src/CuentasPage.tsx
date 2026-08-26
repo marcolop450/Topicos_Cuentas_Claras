@@ -14,9 +14,7 @@ export default function CuentasPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const { modal, showConfirm, closeConfirm } = useConfirmModal();
 
-  useEffect(() => {
-    fetchGroups();
-  }, []);
+  useEffect(() => { fetchGroups(); }, []);
 
   async function fetchGroups() {
     setLoading(true);
@@ -27,14 +25,10 @@ export default function CuentasPage() {
         setLoading(false);
         return;
       }
-      const { data, error } = await supabase
-        .from('groups')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('groups').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       setGroups(data || []);
     } catch (err: any) {
-      console.error(err);
       setGlobalError('Error al cargar cuentas. Verifica la conexion a Supabase.');
     } finally {
       setLoading(false);
@@ -44,140 +38,95 @@ export default function CuentasPage() {
   async function createGroup(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!newGroupName.trim()) {
-      setFormError('Por favor, ingresa un nombre para la cuenta.');
-      return;
-    }
+    if (!newGroupName.trim()) { setFormError('Ingresa un nombre para la cuenta.'); return; }
     try {
-      const { data, error } = await supabase
-        .from('groups')
-        .insert([{ name: newGroupName.trim() }])
-        .select();
+      const { data, error } = await supabase.from('groups').insert([{ name: newGroupName.trim() }]).select();
       if (error) throw error;
-      const newGroup = data[0];
-      setGroups([newGroup, ...groups]);
+      setGroups([data[0], ...groups]);
       setNewGroupName('');
-      // Navigate to the new group
-      navigate(`/cuenta/${newGroup.id}`);
+      navigate(`/cuenta/${data[0].id}`);
     } catch (err: any) {
-      setFormError('Hubo un error al crear la cuenta. Intenta de nuevo.');
+      setFormError('Error al crear la cuenta.');
     }
   }
 
   function handleDeleteGroup(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    showConfirm(
-      'Eliminar Cuenta',
-      'Esta accion eliminara la cuenta y todo su historial de gastos. No se puede deshacer.',
-      async () => {
-        try {
-          const { error } = await supabase.from('groups').delete().eq('id', id);
-          if (error) throw error;
-          setGroups(groups.filter(g => g.id !== id));
-        } catch (err: any) {
-          setGlobalError('Error al eliminar la cuenta.');
-        }
+    showConfirm('Eliminar Cuenta', 'Se eliminara la cuenta y todo su historial. No se puede deshacer.', async () => {
+      try {
+        const { error } = await supabase.from('groups').delete().eq('id', id);
+        if (error) throw error;
+        setGroups(groups.filter(g => g.id !== id));
+      } catch (err: any) {
+        setGlobalError('Error al eliminar.');
       }
-    );
+    });
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
         <Navbar backLabel="Inicio" backTo="/" />
-        <div className="p-8 text-center text-gray-500">Cargando...</div>
+        <div className="p-8 text-center text-[var(--text-muted)]">Cargando...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
       <Navbar backLabel="Inicio" backTo="/" />
-      <ConfirmModal
-        isOpen={modal.isOpen}
-        title={modal.title}
-        message={modal.message}
-        onConfirm={modal.onConfirm}
-        onCancel={closeConfirm}
-      />
+      <ConfirmModal isOpen={modal.isOpen} title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onCancel={closeConfirm} />
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 pb-12">
-        <div className="page-enter">
-          {/* Page title */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-800 animate-fade-in-up">Mis Cuentas</h1>
-            <p className="text-gray-500 mt-1 animate-fade-in-up delay-100">Crea y administra tus cuentas de gastos compartidos</p>
+      <div className="max-w-3xl mx-auto px-4 md:px-8 pb-12 animate-fade-in">
+
+        <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Mis Cuentas</h1>
+        <p className="text-sm text-[var(--text-secondary)] mb-6">Administra tus cuentas de gastos compartidos</p>
+
+        {globalError && (
+          <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-lg mb-4 flex gap-2 items-start border border-red-200 dark:border-red-500/20 text-sm">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{globalError}</span>
           </div>
+        )}
 
-          {globalError && (
-            <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex gap-2 items-start border border-red-200 animate-fade-in">
-              <AlertCircle className="shrink-0 mt-0.5" size={20} />
-              <div>
-                <p className="font-medium">Atencion</p>
-                <p className="text-sm">{globalError}</p>
-              </div>
+        {/* Create */}
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5 mb-6 transition-colors">
+          <form onSubmit={createGroup}>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Nombre de la cuenta (ej. Almuerzo, Viaje)" className="flex-1 px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:text-[var(--text-muted)]" />
+              <button type="submit" className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-sm font-medium transition-colors">
+                <Plus size={16} /> Crear
+              </button>
             </div>
-          )}
+            <FormError message={formError} />
+          </form>
+        </div>
 
-          {/* Create group form */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8 animate-fade-in-up delay-200">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Nueva Cuenta</h2>
-            <form onSubmit={createGroup}>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  value={newGroupName}
-                  onChange={e => setNewGroupName(e.target.value)}
-                  placeholder="Nombre de la cuenta (ej. Almuerzo equipo, Viaje Samaipata)"
-                  className={`flex-1 px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${formError ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
-                />
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 font-medium hover:shadow-lg hover:shadow-blue-500/20 hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  <Plus size={18} /> Crear Cuenta
+        {/* List */}
+        <div className="space-y-2">
+          {groups.length === 0 ? (
+            <div className="text-center py-12 bg-[var(--bg-card)] border border-dashed border-[var(--border)] rounded-xl transition-colors">
+              <FolderOpen className="mx-auto text-[var(--text-muted)] mb-2" size={36} />
+              <p className="text-[var(--text-secondary)] text-sm">No hay cuentas todavia</p>
+            </div>
+          ) : (
+            groups.map(group => (
+              <div key={group.id} onClick={() => navigate(`/cuenta/${group.id}`)} className="flex justify-between items-center p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] hover:border-indigo-300 dark:hover:border-indigo-500/40 cursor-pointer transition-colors group/item">
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2 rounded-lg text-indigo-500">
+                    <FolderOpen size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-[var(--text-primary)] text-sm">{group.name}</h3>
+                    <p className="text-xs text-[var(--text-muted)]">{new Date(group.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <button onClick={(e) => handleDeleteGroup(group.id, e)} className="text-[var(--text-muted)] hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100" title="Eliminar">
+                  <Trash2 size={16} />
                 </button>
               </div>
-              <FormError message={formError} />
-            </form>
-          </div>
-
-          {/* Groups list */}
-          <div className="space-y-3">
-            {groups.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300 animate-fade-in-up delay-300">
-                <FolderOpen className="mx-auto text-gray-300 mb-3" size={48} />
-                <p className="text-gray-500 font-medium text-lg">No tienes ninguna cuenta activa</p>
-                <p className="text-sm text-gray-400 mt-1">Crea una para empezar a dividir gastos.</p>
-              </div>
-            ) : (
-              groups.map((group, index) => (
-                <div
-                  key={group.id}
-                  onClick={() => navigate(`/cuenta/${group.id}`)}
-                  className={`flex justify-between items-center p-5 rounded-2xl border border-gray-100 bg-white hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 group/item animate-fade-in-up`}
-                  style={{ animationDelay: `${200 + index * 80}ms` }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-xl text-white shadow-md shadow-blue-500/20">
-                      <FolderOpen size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800 text-lg group-hover/item:text-blue-700 transition-colors">{group.name}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">Creado el {new Date(group.created_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => handleDeleteGroup(group.id, e)}
-                    className="text-gray-300 hover:text-red-500 p-2 rounded-xl hover:bg-red-50 transition-all opacity-0 group-hover/item:opacity-100"
-                    title="Eliminar cuenta"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
