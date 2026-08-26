@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit } from './utils';
-import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon, ArrowRight, PieChart } from 'lucide-react';
+import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon, ArrowRight, MessageCircle } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 
 export default function CuentaDetailPage() {
@@ -144,7 +144,24 @@ export default function CuentaDetailPage() {
 
   // Resumen Data
   const totalGasto = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const promedioPersona = participants.length > 0 ? totalGasto / participants.length : 0;
+
+  function shareToWhatsApp() {
+    let text = `📊 *Resumen de Gastos* - ${group?.name || 'Cuentas Claras'}\n💰 Gasto total: Bs. ${totalGasto.toFixed(2)}\n\n`;
+    
+    if (settlements.length === 0) {
+      text += '✅ Estan todos a mano. No hay deudas.\n';
+    } else {
+      text += '*Transferencias a realizar:*\n';
+      settlements.forEach(t => {
+        text += `🔴 ${t.from} paga Bs. ${t.amount.toFixed(2)} ➡️ a ${t.to}\n`;
+      });
+    }
+    
+    text += '\n(Generado con Cuentas Claras)';
+    
+    // Open WhatsApp
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
 
   if (loading) {
     return (
@@ -170,7 +187,7 @@ export default function CuentaDetailPage() {
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 pb-12 animate-fade-in">
 
-        {/* Header con Resumen (Nueva Funcionalidad) */}
+        {/* Header con Resumen */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500">
@@ -182,14 +199,10 @@ export default function CuentaDetailPage() {
             </div>
           </div>
           
-          <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl divide-x divide-[var(--border)] overflow-hidden shadow-sm">
-            <div className="px-4 py-2 flex flex-col justify-center">
+          <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm">
+            <div className="px-5 py-2.5 flex flex-col justify-center">
               <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Gasto Total</span>
-              <span className="text-sm font-bold text-[var(--text-primary)]">Bs. {totalGasto.toFixed(2)}</span>
-            </div>
-            <div className="px-4 py-2 flex flex-col justify-center">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Promedio / Persona</span>
-              <span className="text-sm font-bold text-[var(--text-primary)]">Bs. {promedioPersona.toFixed(2)}</span>
+              <span className="text-lg font-bold text-[var(--text-primary)]">Bs. {totalGasto.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -365,7 +378,17 @@ export default function CuentaDetailPage() {
 
             {/* Settlements */}
             <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
-              <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Transferencias</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-base font-semibold text-[var(--text-primary)]">Transferencias</h2>
+                {settlements.length > 0 && (
+                  <button 
+                    onClick={shareToWhatsApp}
+                    className="flex items-center gap-1.5 text-xs font-medium bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <MessageCircle size={14} /> Compartir
+                  </button>
+                )}
+              </div>
               {settlements.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-lg">
                   <p className="text-sm font-medium text-[var(--text-primary)]">Todos a mano</p>
