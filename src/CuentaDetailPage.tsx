@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit } from './utils';
-import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon, ArrowRight, MessageCircle } from 'lucide-react';
+import { Trash2, Edit2, Users, Receipt, Calculator, AlertCircle, FolderOpen, ArrowRight, MessageCircle } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 import { useAuth } from './hooks/useAuth';
 

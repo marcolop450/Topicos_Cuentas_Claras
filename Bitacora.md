@@ -75,3 +75,13 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.1 Pro (High)
 **Mensaje**: Te falta para volver de Login a Landing un boton , Recordar no pantallas sin vueltas, y de paso eso de Agregar Participantes quitar, que sea lista de Usuarios, Cualquiera puede registrar los gastos eso si, Falta el de Salir de Grupo
 
+
+## 2026-08-27 17:18:49
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Failed to run sql query: ERROR:  40P01: deadlock detected
+
+
+## 2026-08-27 17:21:30
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Vale seguimos con errores > temp-app@0.0.0 build ...
+
