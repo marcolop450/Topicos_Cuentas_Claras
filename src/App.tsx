@@ -28,7 +28,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<GuestRoute><AuthPage /></GuestRoute>} />
           <Route path="/cuentas" element={<ProtectedRoute><CuentasPage /></ProtectedRoute>} />
-          <Route path="/cuenta/:id" element={<ProtectedRoute><CuentaDetailPage /></ProtectedRoute>} />
+          <Route path="/cuenta/:slug" element={<ProtectedRoute><CuentaDetailPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

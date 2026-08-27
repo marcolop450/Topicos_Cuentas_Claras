@@ -55,3 +55,8 @@ Eres un SeÃ±or en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Claude Sonnet 4.6 (Thinking)
 **Mensaje**: Vale, va a haber una actualizacion en la Plataforma vamos a colocar lo que es Inicio de Secion, Cerrar Secion y Registrar, Los Participantes pueden Unirse por un codigo de Sala y un aviso de que esten de acuerdo a la operacion, asi que pasa el BD Actualizada la script, Coloca seguridad, coloca tiempo de Conexion para que no este demasiado tiempo abierto, Recordar No se puede salir si debe una deuda o le deben, Solo el Dueño de la Sala puede eliminar la Sala, y en movil no se ve la basurita, Osea Usuario Crea Sala Gente se Une por un Codigo y otros no pueden ver otras salas
 
+
+## 2026-08-27 16:35:26
+**Modelo**: Claude Sonnet 4.6 (Thinking)
+**Mensaje**: Y Noto algo mas que en el directorio de la url coloca el id dela sala, que coloco el nombre de la sala
+

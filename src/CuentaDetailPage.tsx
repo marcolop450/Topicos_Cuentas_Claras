@@ -10,9 +10,12 @@ import { useAuth } from './hooks/useAuth';
 type GroupFull = Group & { join_code: string; owner_id: string };
 
 export default function CuentaDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+
+  // Extract join code: last 6 chars after the last dash
+  const joinCode = slug ? slug.slice(-6).toUpperCase() : '';
 
   const [group, setGroup] = useState<GroupFull | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -31,12 +34,17 @@ export default function CuentaDetailPage() {
   const [activeTab, setActiveTab] = useState<'participants' | 'expenses' | 'balances'>('participants');
   const { modal, showConfirm, closeConfirm } = useConfirmModal();
 
-  useEffect(() => { if (id) fetchAll(id); }, [id]);
+  useEffect(() => { if (joinCode) fetchAll(joinCode); }, [joinCode]);
   useEffect(() => { setFormError(null); }, [activeTab]);
 
-  async function fetchAll(groupId: string) {
+  async function fetchAll(code: string) {
     setLoading(true);
     try {
+      // Lookup by join_code using RPC (bypasses RLS safely)
+      const { data: found } = await supabase.rpc('find_group_by_code', { p_code: code });
+      if (!found || found.length === 0) { navigate('/cuentas'); return; }
+      const groupId = found[0].id;
+
       const { data: gData } = await supabase.from('groups').select('*').eq('id', groupId).single();
       const { data: pData } = await supabase.from('participants').select('*').eq('group_id', groupId).order('created_at', { ascending: true });
       const { data: eData } = await supabase.from('expenses').select('*').eq('group_id', groupId).order('created_at', { ascending: false });
@@ -54,7 +62,7 @@ export default function CuentaDetailPage() {
     setFormError(null);
     if (!newParticipantName.trim()) { setFormError('Ingresa el nombre del participante.'); return; }
     try {
-      const { data, error } = await supabase.from('participants').insert([{ name: newParticipantName.trim(), group_id: id }]).select();
+      const { data, error } = await supabase.from('participants').insert([{ name: newParticipantName.trim(), group_id: group?.id }]).select();
       if (error) throw error;
       setParticipants([...participants, data[0]]);
       setNewParticipantName('');
@@ -99,7 +107,7 @@ export default function CuentaDetailPage() {
         setSplits([...splits.filter(s => s.expense_id !== editingExpenseId), ...(splData || [])]);
         setEditingExpenseId(null);
       } else {
-        const { data: expData } = await supabase.from('expenses').insert([{ group_id: id, description: description.trim(), amount: parseFloat(amount), payer_id: payerId }]).select();
+        const { data: expData } = await supabase.from('expenses').insert([{ group_id: group?.id, description: description.trim(), amount: parseFloat(amount), payer_id: payerId }]).select();
         const newExp = expData![0];
         const { data: splData } = await supabase.from('expense_splits').insert(selectedParticipants.map(pId => ({ expense_id: newExp.id, participant_id: pId }))).select();
         setExpenses([newExp, ...expenses]);

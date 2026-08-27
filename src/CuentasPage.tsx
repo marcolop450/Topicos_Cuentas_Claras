@@ -11,6 +11,16 @@ function generateJoinCode(): string {
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+function slugify(name: string, code: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+  return `${slug}-${code.toLowerCase()}`;
+}
+
 export default function CuentasPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -70,7 +80,7 @@ export default function CuentasPage() {
 
       setGroups([data[0], ...groups]);
       setNewGroupName('');
-      navigate(`/cuenta/${data[0].id}`);
+      navigate(`/cuenta/${slugify(data[0].name, data[0].join_code)}`);
     } catch (err: any) {
       setFormError('Error al crear la cuenta.');
     }
@@ -101,7 +111,7 @@ export default function CuentasPage() {
     if (joinErr) throw new Error('No se pudo unir a la sala.');
 
     await fetchGroups();
-    navigate(`/cuenta/${group.id}`);
+    navigate(`/cuenta/${slugify(group.name, code)}`);
   }
 
   function handleDeleteGroup(id: string, e: React.MouseEvent) {
@@ -196,7 +206,7 @@ export default function CuentasPage() {
               return (
                 <div
                   key={group.id}
-                  onClick={() => navigate(`/cuenta/${group.id}`)}
+                  onClick={() => navigate(`/cuenta/${slugify(group.name, group.join_code)}`)}
                   className="flex items-center gap-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] hover:border-indigo-300 dark:hover:border-indigo-500/40 cursor-pointer transition-colors group/item"
                 >
                   <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2 rounded-lg text-indigo-500 shrink-0">
