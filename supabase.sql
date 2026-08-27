@@ -4,11 +4,7 @@
 -- ============================================================
 
 -- 1. Limpiar BD anterior
-DROP TABLE IF EXISTS expense_splits CASCADE;
-DROP TABLE IF EXISTS expenses CASCADE;
-DROP TABLE IF EXISTS participants CASCADE;
-DROP TABLE IF EXISTS group_members CASCADE;
-DROP TABLE IF EXISTS groups CASCADE;
+DROP TABLE IF EXISTS expense_splits, expenses, participants, group_members, groups CASCADE;
 
 -- 2. Tabla de Grupos/Salas
 CREATE TABLE groups (
