@@ -49,7 +49,8 @@ export default function CuentasPage() {
       if (error) throw error;
       setGroups(data || []);
     } catch (err: any) {
-      setGlobalError('Error al cargar cuentas. Verifica la conexion a Supabase.');
+      console.error('fetchGroups error:', err);
+      setGlobalError(`Error al cargar cuentas: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -82,7 +83,8 @@ export default function CuentasPage() {
       setNewGroupName('');
       navigate(`/cuenta/${slugify(data[0].name, data[0].join_code)}`);
     } catch (err: any) {
-      setFormError('Error al crear la cuenta.');
+      console.error('createGroup error:', err);
+      setFormError(`Error al crear la sala: ${err.message || err}`);
     }
   }
 
