@@ -28,15 +28,20 @@ export default function AuthPage() {
         if (!name.trim()) { setError('El nombre es obligatorio.'); setLoading(false); return; }
         if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); setLoading(false); return; }
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { name: name.trim() } },
         });
 
         if (error) throw error;
-        setSuccess('Cuenta creada. Revisa tu correo para confirmar (o si omitiste la confirmacion, inicia sesion).');
-        setTab('login');
+        
+        if (data.session) {
+          navigate('/cuentas');
+        } else {
+          setSuccess('Cuenta creada exitosamente. Ya puedes iniciar sesion.');
+          setTab('login');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

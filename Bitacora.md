@@ -60,3 +60,8 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Claude Sonnet 4.6 (Thinking)
 **Mensaje**: Y Noto algo mas que en el directorio de la url coloca el id dela sala, que coloco el nombre de la sala
 
+
+## 2026-08-27 16:58:52
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Sale ese tipo de error del SupaBase, quitaste la verificacion de gmail de supabase porfa, que sea asi como se registro
+

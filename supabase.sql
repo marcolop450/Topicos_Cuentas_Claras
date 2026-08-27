@@ -111,11 +111,7 @@ ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "members_can_view_groups"
   ON groups FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM group_members
-      WHERE group_members.group_id = groups.id
-        AND group_members.user_id = auth.uid()
-    )
+    id IN (SELECT group_id FROM group_members WHERE user_id = auth.uid())
   );
 
 -- groups: solo autenticados pueden crear salas
@@ -133,16 +129,10 @@ CREATE POLICY "owner_can_update_group"
   ON groups FOR UPDATE
   USING (auth.uid() = owner_id);
 
--- group_members: ver miembros del grupo si eres miembro
+-- group_members: ver solo tus propias membresias
 CREATE POLICY "members_can_view_members"
   ON group_members FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM group_members gm
-      WHERE gm.group_id = group_members.group_id
-        AND gm.user_id = auth.uid()
-    )
-  );
+  USING (user_id = auth.uid());
 
 -- group_members: insertar solo tu propio registro
 CREATE POLICY "user_can_join_group"
@@ -158,33 +148,24 @@ CREATE POLICY "user_can_leave_group"
 CREATE POLICY "members_can_manage_participants"
   ON participants FOR ALL
   USING (
-    EXISTS (
-      SELECT 1 FROM group_members
-      WHERE group_members.group_id = participants.group_id
-        AND group_members.user_id = auth.uid()
-    )
+    group_id IN (SELECT group_id FROM group_members WHERE user_id = auth.uid())
   );
 
 -- expenses: miembros del grupo pueden operar
 CREATE POLICY "members_can_manage_expenses"
   ON expenses FOR ALL
   USING (
-    EXISTS (
-      SELECT 1 FROM group_members
-      WHERE group_members.group_id = expenses.group_id
-        AND group_members.user_id = auth.uid()
-    )
+    group_id IN (SELECT group_id FROM group_members WHERE user_id = auth.uid())
   );
 
 -- expense_splits: miembros del grupo pueden operar
 CREATE POLICY "members_can_manage_splits"
   ON expense_splits FOR ALL
   USING (
-    EXISTS (
-      SELECT 1 FROM expenses e
-      JOIN group_members gm ON gm.group_id = e.group_id
-      WHERE e.id = expense_splits.expense_id
-        AND gm.user_id = auth.uid()
+    expense_id IN (
+      SELECT id FROM expenses WHERE group_id IN (
+        SELECT group_id FROM group_members WHERE user_id = auth.uid()
+      )
     )
   );
 
