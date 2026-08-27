@@ -21,8 +21,8 @@ export default function LandingPage() {
           <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors" title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          <button onClick={() => navigate('/cuentas')} className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors">
-            Ir a mis cuentas
+          <button onClick={() => navigate('/auth')} className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors border border-indigo-300 dark:border-indigo-500/40 px-4 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">
+            Ingresar
           </button>
         </div>
       </nav>
@@ -45,7 +45,7 @@ export default function LandingPage() {
         </p>
 
         <button
-          onClick={() => navigate('/cuentas')}
+          onClick={() => navigate('/auth')}
           className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium text-base px-6 py-3 rounded-lg transition-colors flex items-center gap-2"
         >
           Comenzar

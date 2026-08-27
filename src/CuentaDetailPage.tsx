@@ -5,12 +5,16 @@ import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit } from './utils';
 import { Trash2, Edit2, Plus, Users, Receipt, Calculator, AlertCircle, FolderOpen, X as XIcon, ArrowRight, MessageCircle } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
+import { useAuth } from './hooks/useAuth';
+
+type GroupFull = Group & { join_code: string; owner_id: string };
 
 export default function CuentaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
-  const [group, setGroup] = useState<Group | null>(null);
+  const [group, setGroup] = useState<GroupFull | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [splits, setSplits] = useState<ExpenseSplit[]>([]);
@@ -62,25 +66,19 @@ export default function CuentaDetailPage() {
     const balance = balances.find(b => b.participantId === participant.id);
 
     if (balance && balance.balance < -0.01) {
-      setFormError(`No se puede eliminar a "${participant.name}" porque tiene una deuda pendiente de Bs. ${Math.abs(balance.balance).toFixed(2)}.`);
+      setFormError(`No se puede eliminar a "${participant.name}": tiene una deuda pendiente de Bs. ${Math.abs(balance.balance).toFixed(2)}.`);
       return;
     }
-
-    const isPayerOfExpense = expenses.some(exp => exp.payer_id === participant.id);
-    if (isPayerOfExpense) {
-      setFormError(`No se puede eliminar a "${participant.name}" porque es pagador de uno o mas gastos. Elimina esos gastos primero.`);
+    if (expenses.some(exp => exp.payer_id === participant.id)) {
+      setFormError(`No se puede eliminar a "${participant.name}": es pagador de uno o mas gastos.`);
       return;
     }
-
     showConfirm('Eliminar Participante', `Se eliminara a "${participant.name}" de esta cuenta.`, async () => {
       try {
-        const { error } = await supabase.from('participants').delete().eq('id', participant.id);
-        if (error) throw error;
+        await supabase.from('participants').delete().eq('id', participant.id);
         setParticipants(participants.filter(p => p.id !== participant.id));
         setSplits(splits.filter(s => s.participant_id !== participant.id));
-      } catch (err: any) {
-        setFormError('Error al eliminar participante.');
-      }
+      } catch (err: any) { setFormError('Error al eliminar.'); }
     });
   }
 
@@ -94,20 +92,16 @@ export default function CuentaDetailPage() {
 
     try {
       if (editingExpenseId) {
-        const { error: expError } = await supabase.from('expenses').update({ description: description.trim(), amount: parseFloat(amount), payer_id: payerId }).eq('id', editingExpenseId);
-        if (expError) throw expError;
+        await supabase.from('expenses').update({ description: description.trim(), amount: parseFloat(amount), payer_id: payerId }).eq('id', editingExpenseId);
         await supabase.from('expense_splits').delete().eq('expense_id', editingExpenseId);
-        const { data: splData, error: splError } = await supabase.from('expense_splits').insert(selectedParticipants.map(pId => ({ expense_id: editingExpenseId, participant_id: pId }))).select();
-        if (splError) throw splError;
+        const { data: splData } = await supabase.from('expense_splits').insert(selectedParticipants.map(pId => ({ expense_id: editingExpenseId, participant_id: pId }))).select();
         setExpenses(expenses.map(exp => exp.id === editingExpenseId ? { ...exp, description: description.trim(), amount: parseFloat(amount), payer_id: payerId } : exp));
         setSplits([...splits.filter(s => s.expense_id !== editingExpenseId), ...(splData || [])]);
         setEditingExpenseId(null);
       } else {
-        const { data: expData, error: expError } = await supabase.from('expenses').insert([{ group_id: id, description: description.trim(), amount: parseFloat(amount), payer_id: payerId }]).select();
-        if (expError) throw expError;
-        const newExp = expData[0];
-        const { data: splData, error: splError } = await supabase.from('expense_splits').insert(selectedParticipants.map(pId => ({ expense_id: newExp.id, participant_id: pId }))).select();
-        if (splError) throw splError;
+        const { data: expData } = await supabase.from('expenses').insert([{ group_id: id, description: description.trim(), amount: parseFloat(amount), payer_id: payerId }]).select();
+        const newExp = expData![0];
+        const { data: splData } = await supabase.from('expense_splits').insert(selectedParticipants.map(pId => ({ expense_id: newExp.id, participant_id: pId }))).select();
         setExpenses([newExp, ...expenses]);
         setSplits([...splits, ...(splData || [])]);
       }
@@ -129,11 +123,9 @@ export default function CuentaDetailPage() {
 
   function handleDeleteExpense(expenseId: string) {
     showConfirm('Eliminar Gasto', 'Esto afectara los balances de los participantes.', async () => {
-      try {
-        await supabase.from('expenses').delete().eq('id', expenseId);
-        setExpenses(expenses.filter(e => e.id !== expenseId));
-        setSplits(splits.filter(s => s.expense_id !== expenseId));
-      } catch (err: any) { /* silent */ }
+      await supabase.from('expenses').delete().eq('id', expenseId);
+      setExpenses(expenses.filter(e => e.id !== expenseId));
+      setSplits(splits.filter(s => s.expense_id !== expenseId));
     });
   }
 
@@ -141,74 +133,72 @@ export default function CuentaDetailPage() {
   const settlements = calculateSettlement(balances);
   const balanceSum = balances.reduce((sum, b) => sum + b.balance, 0);
   const isBalanceZero = Math.abs(balanceSum) < 0.01;
-
-  // Resumen Data
   const totalGasto = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const isOwner = group?.owner_id === user?.id;
+  const allSelected = participants.length > 0 && selectedParticipants.length === participants.length;
 
   function shareToWhatsApp() {
-    let text = `📊 *Resumen de Gastos* - ${group?.name || 'Cuentas Claras'}\n💰 Gasto total: Bs. ${totalGasto.toFixed(2)}\n\n`;
-    
+    let text = `*Resumen - ${group?.name}*\nGasto total: Bs. ${totalGasto.toFixed(2)}\n\n`;
     if (settlements.length === 0) {
-      text += '✅ Estan todos a mano. No hay deudas.\n';
+      text += 'Todos a mano. No hay deudas.';
     } else {
-      text += '*Transferencias a realizar:*\n';
-      settlements.forEach(t => {
-        text += `🔴 ${t.from} paga Bs. ${t.amount.toFixed(2)} ➡️ a ${t.to}\n`;
-      });
+      text += '*Transferencias:*\n';
+      settlements.forEach(t => { text += `${t.from} -> Bs. ${t.amount.toFixed(2)} -> ${t.to}\n`; });
     }
-    
-    text += '\n(Generado con Cuentas Claras)';
-    
-    // Open WhatsApp
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
-        <Navbar backLabel="Mis cuentas" backTo="/cuentas" />
+        <Navbar backLabel="Mis salas" backTo="/cuentas" onSignOut={signOut} />
         <div className="p-8 text-center text-[var(--text-muted)]">Cargando...</div>
       </div>
     );
   }
 
   const tabs = [
-    { key: 'participants' as const, label: 'Participantes', icon: <Users size={16} /> },
-    { key: 'expenses' as const, label: 'Gastos', icon: <Receipt size={16} /> },
-    { key: 'balances' as const, label: 'Liquidacion', icon: <Calculator size={16} /> },
+    { key: 'participants' as const, label: 'Participantes', icon: <Users size={15} /> },
+    { key: 'expenses' as const, label: 'Gastos', icon: <Receipt size={15} /> },
+    { key: 'balances' as const, label: 'Liquidacion', icon: <Calculator size={15} /> },
   ];
-
-  const allSelected = participants.length > 0 && selectedParticipants.length === participants.length;
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
-      <Navbar backLabel="Mis cuentas" backTo="/cuentas" />
+      <Navbar backLabel="Mis salas" backTo="/cuentas" userName={user?.user_metadata?.name || user?.email} onSignOut={signOut} />
       <ConfirmModal isOpen={modal.isOpen} title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onCancel={closeConfirm} />
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 pb-12 animate-fade-in">
 
-        {/* Header con Resumen */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
-            <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500">
-              <FolderOpen size={24} />
+            <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500 shrink-0">
+              <FolderOpen size={22} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[var(--text-primary)]">{group?.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-[var(--text-primary)]">{group?.name}</h1>
+                {isOwner && <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded font-semibold">DUEÑO</span>}
+              </div>
               <p className="text-xs text-[var(--text-muted)]">{participants.length} participantes / {expenses.length} gastos</p>
             </div>
           </div>
-          
-          <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm">
-            <div className="px-5 py-2.5 flex flex-col justify-center">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Gasto Total</span>
-              <span className="text-lg font-bold text-[var(--text-primary)]">Bs. {totalGasto.toFixed(2)}</span>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-lg px-3 py-2">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Codigo</span>
+              <span className="font-mono font-bold text-sm text-indigo-500 tracking-widest">{group?.join_code}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-lg px-3 py-2">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Total</span>
+              <span className="font-bold text-sm text-[var(--text-primary)]">Bs. {totalGasto.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border)] transition-colors overflow-x-auto">
+        <div className="flex gap-1 mb-5 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border)] transition-colors overflow-x-auto">
           {tabs.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 px-3 rounded-lg transition-colors text-sm font-medium whitespace-nowrap ${activeTab === tab.key ? 'bg-indigo-500 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}>
               {tab.icon} {tab.label}
@@ -243,9 +233,10 @@ export default function CuentaDetailPage() {
                     return (
                       <li key={p.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] group/p transition-colors">
                         <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{p.name}</span>
+                        {/* Always visible on mobile, hover on desktop */}
                         <button
                           onClick={() => handleDeleteParticipant(p)}
-                          className={`p-1 rounded-md transition-all sm:opacity-0 group-hover/p:opacity-100 ${hasDebt ? 'text-[var(--text-muted)] cursor-not-allowed' : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'}`}
+                          className={`p-1.5 rounded-md transition-all flex-shrink-0 ${hasDebt ? 'text-[var(--text-muted)] cursor-not-allowed' : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'} sm:opacity-0 sm:group-hover/p:opacity-100 opacity-100`}
                           title={hasDebt ? 'No se puede eliminar: tiene deuda' : 'Eliminar'}
                         >
                           {hasDebt ? <AlertCircle size={14} /> : <XIcon size={14} />}
@@ -262,7 +253,6 @@ export default function CuentaDetailPage() {
         {/* GASTOS */}
         {activeTab === 'expenses' && (
           <div className="grid lg:grid-cols-5 gap-4">
-            {/* Form */}
             <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 h-fit transition-colors">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">{editingExpenseId ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
               <form onSubmit={saveExpense} className="space-y-3">
@@ -279,27 +269,23 @@ export default function CuentaDetailPage() {
                   <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Quien pago</label>
                   <select value={payerId} onChange={e => setPayerId(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors">
                     <option value="">Selecciona...</option>
-                    {participants.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                    {participants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-medium text-[var(--text-secondary)]">Dividir entre</label>
-                    <button 
-                      type="button" 
-                      onClick={() => setSelectedParticipants(allSelected ? [] : participants.map(p => p.id))} 
-                      className="text-xs text-indigo-500 hover:underline font-medium"
-                    >
+                    <button type="button" onClick={() => setSelectedParticipants(allSelected ? [] : participants.map(p => p.id))} className="text-xs text-indigo-500 hover:underline font-medium">
                       {allSelected ? 'Deseleccionar todos' : 'Todos'}
                     </button>
                   </div>
-                  <div className="space-y-0.5 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)] custom-scrollbar">
+                  <div className="space-y-0.5 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)]">
                     {participants.length === 0 && <p className="text-xs text-[var(--text-muted)] text-center py-2">Agrega participantes primero</p>}
                     {participants.map(p => (
                       <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 hover:bg-[var(--bg-card)] rounded-md transition-colors">
-                        <input type="checkbox" checked={selectedParticipants.includes(p.id)} onChange={(e) => {
+                        <input type="checkbox" checked={selectedParticipants.includes(p.id)} onChange={e => {
                           if (e.target.checked) setSelectedParticipants([...selectedParticipants, p.id]);
-                          else setSelectedParticipants(selectedParticipants.filter(sid => sid !== p.id));
+                          else setSelectedParticipants(selectedParticipants.filter(s => s !== p.id));
                         }} className="rounded text-indigo-500 focus:ring-indigo-500 w-3.5 h-3.5" />
                         <span className="text-[var(--text-primary)] truncate">{p.name}</span>
                       </label>
@@ -310,14 +296,11 @@ export default function CuentaDetailPage() {
                   <button type="submit" disabled={participants.length === 0} className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-2.5 text-sm rounded-lg transition-colors disabled:opacity-40">
                     {editingExpenseId ? 'Guardar' : 'Agregar'}
                   </button>
-                  {editingExpenseId && (
-                    <button type="button" onClick={cancelEdit} className="flex-1 bg-[var(--bg-secondary)] text-[var(--text-secondary)] font-medium px-4 py-2.5 text-sm rounded-lg transition-colors hover:bg-[var(--border)]">Cancelar</button>
-                  )}
+                  {editingExpenseId && <button type="button" onClick={cancelEdit} className="flex-1 bg-[var(--bg-secondary)] text-[var(--text-secondary)] font-medium px-4 py-2.5 text-sm rounded-lg transition-colors">Cancelar</button>}
                 </div>
               </form>
             </div>
 
-            {/* List */}
             <div className="lg:col-span-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">Historial</h2>
               {expenses.length === 0 ? (
@@ -331,12 +314,13 @@ export default function CuentaDetailPage() {
                     const payer = participants.find(p => p.id === exp.payer_id)?.name || '?';
                     const expSplits = splits.filter(s => s.expense_id === exp.id);
                     return (
-                      <div key={exp.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 rounded-lg border border-[var(--border)] hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-colors group gap-2">
+                      <div key={exp.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 rounded-lg border border-[var(--border)] hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-colors gap-2">
                         <div className="min-w-0">
                           <p className="font-medium text-[var(--text-primary)] text-sm truncate">{exp.description}</p>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">{payer} pago <span className="font-semibold text-[var(--text-primary)]">Bs. {exp.amount}</span> -- {expSplits.length} pers.</p>
+                          <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">{payer} pago <span className="font-semibold text-[var(--text-primary)]">Bs. {exp.amount}</span> — {expSplits.length} pers.</p>
                         </div>
-                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-center shrink-0">
+                        {/* Always visible action buttons */}
+                        <div className="flex gap-1 self-end sm:self-center shrink-0">
                           <button onClick={() => startEditExpense(exp)} className="text-indigo-400 hover:text-indigo-600 p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors" title="Editar"><Edit2 size={14} /></button>
                           <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Eliminar"><Trash2 size={14} /></button>
                         </div>
@@ -352,7 +336,6 @@ export default function CuentaDetailPage() {
         {/* LIQUIDACION */}
         {activeTab === 'balances' && (
           <div className="grid md:grid-cols-2 gap-4">
-            {/* Balances */}
             <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-base font-semibold text-[var(--text-primary)]">Balances</h2>
@@ -369,23 +352,19 @@ export default function CuentaDetailPage() {
                 ))}
                 {balances.length === 0 && <p className="text-sm text-[var(--text-muted)] text-center py-3">Sin datos</p>}
               </ul>
-              <div className="mt-4 text-xs text-[var(--text-secondary)] p-3 bg-indigo-50 dark:bg-indigo-500/5 rounded-lg border border-indigo-100 dark:border-indigo-500/10">
-                <p className="font-medium text-indigo-600 dark:text-indigo-400 mb-1">Referencia</p>
-                <p><span className="text-emerald-500 font-medium">Verde (+)</span> = le deben dinero</p>
-                <p><span className="text-red-500 font-medium">Rojo (-)</span> = debe dinero</p>
+              <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-500/5 rounded-lg border border-indigo-100 dark:border-indigo-500/10">
+                <p className="font-medium text-xs text-indigo-600 dark:text-indigo-400 mb-1">Referencia</p>
+                <p className="text-xs text-[var(--text-secondary)]"><span className="text-emerald-500 font-medium">Verde (+)</span> = le deben</p>
+                <p className="text-xs text-[var(--text-secondary)]"><span className="text-red-500 font-medium">Rojo (-)</span> = debe</p>
               </div>
             </div>
 
-            {/* Settlements */}
             <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-base font-semibold text-[var(--text-primary)]">Transferencias</h2>
                 {settlements.length > 0 && (
-                  <button 
-                    onClick={shareToWhatsApp}
-                    className="flex items-center gap-1.5 text-xs font-medium bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    <MessageCircle size={14} /> Compartir
+                  <button onClick={shareToWhatsApp} className="flex items-center gap-1.5 text-xs font-medium bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors">
+                    <MessageCircle size={13} /> Compartir
                   </button>
                 )}
               </div>
@@ -403,10 +382,10 @@ export default function CuentaDetailPage() {
                         <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">paga</span>
                         <div className="flex items-center gap-1.5 bg-[var(--bg-card)] px-2.5 py-1 rounded-md border border-[var(--border)]">
                           <span className="text-sm font-bold text-[var(--text-primary)] whitespace-nowrap">Bs. {t.amount.toFixed(2)}</span>
-                          <ArrowRight size={14} className="text-[var(--text-muted)]" />
+                          <ArrowRight size={13} className="text-[var(--text-muted)]" />
                         </div>
                       </div>
-                      <span className="text-sm font-semibold text-emerald-500 flex-1 truncate text-left">{t.to}</span>
+                      <span className="text-sm font-semibold text-emerald-500 flex-1 truncate">{t.to}</span>
                     </li>
                   ))}
                 </ul>
@@ -414,7 +393,6 @@ export default function CuentaDetailPage() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

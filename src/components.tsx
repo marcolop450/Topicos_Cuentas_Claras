@@ -1,74 +1,72 @@
-import { Calculator, AlertCircle, X, Sun, Moon } from 'lucide-react';
+import { Calculator, AlertCircle, X, Sun, Moon, LogOut, UserCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, createContext, useContext } from 'react';
 
 /* ===== THEME CONTEXT ===== */
-
 type Theme = 'light' | 'dark';
 
-const ThemeContext = createContext<{
-  theme: Theme;
-  toggleTheme: () => void;
-}>({ theme: 'light', toggleTheme: () => {} });
+const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({ theme: 'light', toggleTheme: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('cc-theme');
-    return (saved === 'dark' ? 'dark' : 'light') as Theme;
-  });
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('cc-theme') === 'dark' ? 'dark' : 'light'));
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('cc-theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme: () => setTheme(p => p === 'light' ? 'dark' : 'light') }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
-export function useTheme() {
-  return useContext(ThemeContext);
-}
+export function useTheme() { return useContext(ThemeContext); }
 
 /* ===== NAVBAR ===== */
-
 interface NavbarProps {
   backLabel?: string;
   backTo?: string;
+  userName?: string;
+  onSignOut?: () => void;
 }
 
-export function Navbar({ backLabel, backTo }: NavbarProps) {
+export function Navbar({ backLabel, backTo, userName, onSignOut }: NavbarProps) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="bg-[var(--bg-card)] border-b border-[var(--border)] px-4 md:px-8 py-4 mb-6 transition-colors">
-      <div className="max-w-5xl mx-auto flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2.5 group">
+    <div className="bg-[var(--bg-card)] border-b border-[var(--border)] px-4 md:px-8 py-3.5 mb-6 transition-colors">
+      <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+        <Link to="/" className="flex items-center gap-2 group shrink-0">
           <div className="bg-indigo-500 p-1.5 rounded-lg">
-            <Calculator size={20} className="text-white" />
+            <Calculator size={18} className="text-white" />
           </div>
-          <span className="text-lg font-semibold text-[var(--text-primary)] tracking-tight">Cuentas Claras</span>
+          <span className="text-base font-semibold text-[var(--text-primary)] hidden sm:block">Cuentas Claras</span>
         </Link>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
-            title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}
-          >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
+
+        <div className="flex items-center gap-2">
           {backLabel && backTo && (
-            <button
-              onClick={() => navigate(backTo)}
-              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium"
-            >
+            <button onClick={() => navigate(backTo)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium">
               {backLabel}
+            </button>
+          )}
+
+          {userName && (
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] px-3 py-1.5 rounded-lg border border-[var(--border)]">
+              <UserCircle size={14} />
+              <span className="max-w-[120px] truncate">{userName}</span>
+            </div>
+          )}
+
+          <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors" title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>
+            {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+          </button>
+
+          {onSignOut && (
+            <button onClick={onSignOut} className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Cerrar sesion">
+              <LogOut size={17} />
             </button>
           )}
         </div>
@@ -78,7 +76,6 @@ export function Navbar({ backLabel, backTo }: NavbarProps) {
 }
 
 /* ===== CONFIRM MODAL ===== */
-
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
@@ -94,18 +91,90 @@ export function ConfirmModal({ isOpen, title, message, confirmLabel = 'Eliminar'
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
       <div className="bg-[var(--bg-card)] rounded-xl shadow-xl max-w-sm w-full p-6 border border-[var(--border)] animate-fade-in">
         <div className="flex justify-between items-start mb-3">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
-          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-            <X size={20} />
-          </button>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">{title}</h3>
+          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"><X size={20} /></button>
         </div>
         <p className="text-sm text-[var(--text-secondary)] mb-5">{message}</p>
         <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] font-medium rounded-lg transition-colors">
+          <button onClick={onCancel} className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] font-medium rounded-lg transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== JOIN ROOM MODAL ===== */
+interface JoinModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onJoin: (code: string) => Promise<void>;
+}
+
+export function JoinModal({ isOpen, onClose, onJoin }: JoinModalProps) {
+  const [code, setCode] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() { setCode(''); setAgreed(false); setError(null); setLoading(false); }
+
+  async function handleJoin() {
+    if (!code.trim() || code.length !== 6) { setError('Ingresa un codigo de 6 caracteres.'); return; }
+    if (!agreed) { setError('Debes aceptar el acuerdo para unirte.'); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      await onJoin(code.trim().toUpperCase());
+      reset();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'No se pudo unir a la sala.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-[var(--bg-card)] rounded-xl shadow-xl max-w-sm w-full p-6 border border-[var(--border)]">
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">Unirse a una Sala</h3>
+          <button onClick={() => { reset(); onClose(); }} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"><X size={20} /></button>
+        </div>
+
+        <p className="text-xs text-[var(--text-secondary)] mb-4">Ingresa el codigo de 6 caracteres que te compartio el organizador de la sala.</p>
+
+        <input
+          type="text"
+          value={code}
+          onChange={e => setCode(e.target.value.toUpperCase().slice(0, 6))}
+          placeholder="Ej. A4X9KL"
+          className="w-full px-3 py-2.5 text-center text-xl font-bold tracking-[0.5em] border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:tracking-normal placeholder:text-base placeholder:font-normal placeholder:text-[var(--text-muted)] mb-4"
+        />
+
+        <label className="flex items-start gap-2.5 cursor-pointer mb-4">
+          <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 shrink-0" />
+          <span className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Confirmo que acepto unirme a esta sala y participar en la division de gastos. Entiendo que los balances seran calculados automaticamente.
+          </span>
+        </label>
+
+        {error && (
+          <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2.5 rounded-lg mb-3 flex gap-2">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={() => { reset(); onClose(); }} className="flex-1 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] font-medium rounded-lg transition-colors border border-[var(--border)]">
             Cancelar
           </button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">
-            {confirmLabel}
+          <button onClick={handleJoin} disabled={loading} className="flex-1 py-2.5 text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50">
+            {loading ? 'Buscando...' : 'Unirse'}
           </button>
         </div>
       </div>
@@ -114,7 +183,6 @@ export function ConfirmModal({ isOpen, title, message, confirmLabel = 'Eliminar'
 }
 
 /* ===== FORM ERROR ===== */
-
 export function FormError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
@@ -125,23 +193,15 @@ export function FormError({ message }: { message: string | null }) {
   );
 }
 
-/* ===== HOOK ===== */
-
+/* ===== CONFIRM MODAL HOOK ===== */
 export function useConfirmModal() {
-  const [modal, setModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   function showConfirm(title: string, message: string, onConfirm: () => void) {
     setModal({ isOpen: true, title, message, onConfirm: () => { onConfirm(); setModal(prev => ({ ...prev, isOpen: false })); } });
   }
 
-  function closeConfirm() {
-    setModal(prev => ({ ...prev, isOpen: false }));
-  }
+  function closeConfirm() { setModal(prev => ({ ...prev, isOpen: false })); }
 
   return { modal, showConfirm, closeConfirm };
 }
