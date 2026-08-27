@@ -123,3 +123,9 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Claude Sonnet 4.6 (Thinking)
 **Mensaje**: Y Noto algo mas que en el directorio de la url coloca el id dela sala, que coloco el nombre de la sala
 
+
+
+## 2026-08-27 17:13:37
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Te falta para volver de Login a Landing un boton , Recordar no pantallas sin vueltas, y de paso eso de Agregar Participantes quitar, que sea lista de Usuarios, Cualquiera puede registrar los gastos eso si, Falta el de Salir de Grupo
+

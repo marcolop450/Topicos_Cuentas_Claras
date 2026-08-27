@@ -22,7 +22,6 @@ export default function CuentaDetailPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [splits, setSplits] = useState<ExpenseSplit[]>([]);
 
-  const [newParticipantName, setNewParticipantName] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [payerId, setPayerId] = useState('');
@@ -57,36 +56,33 @@ export default function CuentaDetailPage() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   }
 
-  async function addParticipant(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError(null);
-    if (!newParticipantName.trim()) { setFormError('Ingresa el nombre del participante.'); return; }
-    try {
-      const { data, error } = await supabase.from('participants').insert([{ name: newParticipantName.trim(), group_id: group?.id }]).select();
-      if (error) throw error;
-      setParticipants([...participants, data[0]]);
-      setNewParticipantName('');
-    } catch (err: any) { setFormError('Error al agregar participante.'); }
-  }
-
-  function handleDeleteParticipant(participant: Participant) {
-    const balances = calculateBalances(participants, expenses, splits);
-    const balance = balances.find(b => b.participantId === participant.id);
-
-    if (balance && balance.balance < -0.01) {
-      setFormError(`No se puede eliminar a "${participant.name}": tiene una deuda pendiente de Bs. ${Math.abs(balance.balance).toFixed(2)}.`);
-      return;
+  async function handleLeaveGroup() {
+    if (!user || !group) return;
+    
+    // Find my participant record
+    const myParticipant = participants.find(p => p.user_id === user.id);
+    if (myParticipant) {
+      const balances = calculateBalances(participants, expenses, splits);
+      const myBalance = balances.find(b => b.participantId === myParticipant.id);
+      
+      // If balance is not zero (debt or owed), block leaving
+      if (myBalance && Math.abs(myBalance.balance) > 0.01) {
+        if (myBalance.balance > 0) {
+          setFormError(`No puedes salir: la sala te debe Bs. ${myBalance.balance.toFixed(2)}.`);
+        } else {
+          setFormError(`No puedes salir: tienes una deuda de Bs. ${Math.abs(myBalance.balance).toFixed(2)}.`);
+        }
+        return;
+      }
     }
-    if (expenses.some(exp => exp.payer_id === participant.id)) {
-      setFormError(`No se puede eliminar a "${participant.name}": es pagador de uno o mas gastos.`);
-      return;
-    }
-    showConfirm('Eliminar Participante', `Se eliminara a "${participant.name}" de esta cuenta.`, async () => {
+
+    showConfirm('Salir de la sala', '¿Seguro que quieres abandonar esta sala?', async () => {
       try {
-        await supabase.from('participants').delete().eq('id', participant.id);
-        setParticipants(participants.filter(p => p.id !== participant.id));
-        setSplits(splits.filter(s => s.participant_id !== participant.id));
-      } catch (err: any) { setFormError('Error al eliminar.'); }
+        await supabase.from('group_members').delete().eq('group_id', group.id).eq('user_id', user.id);
+        navigate('/cuentas');
+      } catch (err: any) { 
+        setFormError('Error al salir de la sala.'); 
+      }
     });
   }
 
@@ -217,38 +213,45 @@ export default function CuentaDetailPage() {
         {/* PARTICIPANTES */}
         {activeTab === 'participants' && (
           <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl transition-colors">
-            <div className="p-4 sm:p-5 border-b border-[var(--border)]">
-              <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">Agregar Participante</h2>
-              <form onSubmit={addParticipant}>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input type="text" value={newParticipantName} onChange={e => setNewParticipantName(e.target.value)} placeholder="Nombre (ej. Ana)" className="flex-1 px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:text-[var(--text-muted)]" />
-                  <button type="submit" className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-sm font-medium transition-colors">
-                    <Plus size={16} /> Agregar
-                  </button>
+            {!isOwner && (
+              <div className="p-4 sm:p-5 border-b border-[var(--border)] flex justify-between items-center">
+                <div>
+                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Salir de la sala</h2>
+                  <p className="text-sm text-[var(--text-secondary)] mt-1">Abandonar este grupo y eliminarte de la lista (si no tienes deudas).</p>
                 </div>
-                <FormError message={formError} />
-              </form>
-            </div>
+                <button onClick={handleLeaveGroup} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
+                  Salir
+                </button>
+              </div>
+            )}
+            
             <div className="p-4 sm:p-5">
-              <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider mb-3">Participantes ({participants.length})</p>
+              <FormError message={formError} />
+              
+              <div className="flex justify-between items-center mb-3 mt-1">
+                <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Usuarios unidos ({participants.length})</p>
+              </div>
+              
               {participants.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)] text-center py-4">Sin participantes</p>
               ) : (
                 <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                   {participants.map(p => {
+                    const isMe = p.user_id === user?.id;
                     const pBalance = balances.find(b => b.participantId === p.id);
-                    const hasDebt = pBalance && pBalance.balance < -0.01;
+                    const balanceVal = pBalance ? pBalance.balance : 0;
+                    
                     return (
-                      <li key={p.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] group/p transition-colors">
-                        <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{p.name}</span>
-                        {/* Always visible on mobile, hover on desktop */}
-                        <button
-                          onClick={() => handleDeleteParticipant(p)}
-                          className={`p-1.5 rounded-md transition-all flex-shrink-0 ${hasDebt ? 'text-[var(--text-muted)] cursor-not-allowed' : 'text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'} sm:opacity-0 sm:group-hover/p:opacity-100 opacity-100`}
-                          title={hasDebt ? 'No se puede eliminar: tiene deuda' : 'Eliminar'}
-                        >
-                          {hasDebt ? <AlertCircle size={14} /> : <XIcon size={14} />}
-                        </button>
+                      <li key={p.id} className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${isMe ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-500/10' : 'border-[var(--border)] bg-[var(--bg-secondary)]'} transition-colors`}>
+                        <span className={`text-sm font-medium truncate ${isMe ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-primary)]'}`}>
+                          {p.name} {isMe && '(Tú)'}
+                        </span>
+                        
+                        {Math.abs(balanceVal) > 0.01 && (
+                          <span className={`text-xs font-bold ${balanceVal > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {balanceVal > 0 ? '+' : ''}{balanceVal.toFixed(2)} Bs.
+                          </span>
+                        )}
                       </li>
                     );
                   })}

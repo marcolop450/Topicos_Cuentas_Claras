@@ -66,11 +66,16 @@ export default function AuthPage() {
           <div className="bg-indigo-500 p-1.5 rounded-lg">
             <Calculator size={18} className="text-white" />
           </div>
-          <span className="font-semibold text-[var(--text-primary)]">Cuentas Claras</span>
+          <span className="font-semibold text-[var(--text-primary)] hidden sm:inline">Cuentas Claras</span>
         </Link>
-        <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors">
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors">
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <Link to="/" className="text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] px-3 py-1.5 rounded-lg transition-colors border border-transparent hover:border-[var(--border)] flex items-center gap-1.5">
+            Volver
+          </Link>
+        </div>
       </div>
 
       {/* Card */}

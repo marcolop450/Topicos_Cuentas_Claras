@@ -70,3 +70,8 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.1 Pro (High)
 **Mensaje**: Arreglar este error "Error al crear la sala: new row violates row-level security policy for table "groups"", y el Login e Inicio no tiene para volver al Landing, y verifica si ya tiene la secion iniciada (Hay casos que de Landing voy a Login vuelvo a Landing y de pronto me lleva al index)
 
+
+## 2026-08-27 17:13:37
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Te falta para volver de Login a Landing un boton , Recordar no pantallas sin vueltas, y de paso eso de Agregar Participantes quitar, que sea lista de Usuarios, Cualquiera puede registrar los gastos eso si, Falta el de Salir de Grupo
+

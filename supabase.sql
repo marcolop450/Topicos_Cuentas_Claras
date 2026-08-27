@@ -99,6 +99,44 @@ CREATE TRIGGER trg_group_created
   FOR EACH ROW EXECUTE FUNCTION on_group_created();
 
 -- ============================================================
+-- FUNCIÓN: Al unirse a una sala, crear su registro en participants
+-- ============================================================
+CREATE OR REPLACE FUNCTION on_group_member_added()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_name TEXT;
+  v_email TEXT;
+BEGIN
+  SELECT raw_user_meta_data->>'name', email INTO v_name, v_email
+  FROM auth.users WHERE id = NEW.user_id;
+
+  INSERT INTO participants (group_id, user_id, name)
+  VALUES (NEW.group_id, NEW.user_id, COALESCE(v_name, v_email));
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_group_member_added
+  AFTER INSERT ON group_members
+  FOR EACH ROW EXECUTE FUNCTION on_group_member_added();
+
+-- ============================================================
+-- FUNCIÓN: Al salir de una sala, eliminar su registro en participants
+-- ============================================================
+CREATE OR REPLACE FUNCTION on_group_member_removed()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM participants 
+  WHERE group_id = OLD.group_id AND user_id = OLD.user_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_group_member_removed
+  AFTER DELETE ON group_members
+  FOR EACH ROW EXECUTE FUNCTION on_group_member_removed();
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
