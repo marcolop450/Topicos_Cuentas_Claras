@@ -107,10 +107,11 @@ ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY;
 
--- groups: ver solo las salas donde eres miembro
+-- groups: ver solo las salas donde eres miembro o eres el dueño
 CREATE POLICY "members_can_view_groups"
   ON groups FOR SELECT
   USING (
+    owner_id = auth.uid() OR
     id IN (SELECT group_id FROM group_members WHERE user_id = auth.uid())
   );
 

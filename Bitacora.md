@@ -65,3 +65,8 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.1 Pro (High)
 **Mensaje**: Sale ese tipo de error del SupaBase, quitaste la verificacion de gmail de supabase porfa, que sea asi como se registro
 
+
+## 2026-08-27 17:06:08
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Arreglar este error "Error al crear la sala: new row violates row-level security policy for table "groups"", y el Login e Inicio no tiene para volver al Landing, y verifica si ya tiene la secion iniciada (Hay casos que de Landing voy a Login vuelvo a Landing y de pronto me lleva al index)
+

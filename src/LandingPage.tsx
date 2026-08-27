@@ -1,28 +1,30 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Shield, Users, Receipt, BarChart3, Calculator, Sun, Moon } from 'lucide-react';
 import { useTheme } from './components';
+import { useAuth } from './hooks/useAuth';
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
 
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2.5">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
           <div className="bg-indigo-500 p-1.5 rounded-lg">
             <Calculator size={20} className="text-white" />
           </div>
           <span className="text-lg font-semibold text-[var(--text-primary)] tracking-tight">Cuentas Claras</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-3">
           <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors" title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          <button onClick={() => navigate('/auth')} className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors border border-indigo-300 dark:border-indigo-500/40 px-4 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">
-            Ingresar
+          <button onClick={() => navigate(user ? '/cuentas' : '/auth')} className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors border border-indigo-300 dark:border-indigo-500/40 px-4 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10">
+            {user ? 'Mis salas' : 'Ingresar'}
           </button>
         </div>
       </nav>

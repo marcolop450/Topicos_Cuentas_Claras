@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { Calculator, Sun, Moon, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from './components';
@@ -62,12 +62,12 @@ export default function AuthPage() {
     <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col transition-colors">
       {/* Top bar */}
       <div className="flex justify-between items-center px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-card)]">
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="bg-indigo-500 p-1.5 rounded-lg">
             <Calculator size={18} className="text-white" />
           </div>
           <span className="font-semibold text-[var(--text-primary)]">Cuentas Claras</span>
-        </div>
+        </Link>
         <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors">
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
