@@ -108,3 +108,11 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 ## 2026-09-08 10:49:25
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Pregunta 1: SI. Pregunta 2: Opcion 1 (Sirve con multimoneda)
+
+## 2026-09-08 11:24:48
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Revision de esquema de BD actual y propuesta de Muerte a la Deuda (pagos parciales/totales, condonacion/perdon de deuda) y separacion de Titulo y Descripcion en gastos
+
+## 2026-09-08 11:27:13
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Confirmacion requerida: cuando el deudor registra un pago, debe quedar pendiente de confirmacion del acreedor para que recien desaparezca dicha deuda

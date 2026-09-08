@@ -16,10 +16,11 @@ export type SplitMode = 'EQUAL' | 'PERCENTAGE' | 'CUSTOM' | 'PERSONAL';
 export type Expense = {
   id: string;
   group_id: string;
-  description: string;
-  amount: number;       // Monto en la moneda original
-  currency: string;     // Código ISO 4217 (ej: 'BOB', 'USD', 'EUR')
-  amount_usd: number;   // Monto convertido a USD (snapshot al guardar)
+  description: string;   // Título del gasto
+  notes?: string;        // Descripción o notas detalladas opcionales
+  amount: number;        // Monto en la moneda original
+  currency: string;      // Código ISO 4217 (ej: 'BOB', 'USD', 'EUR')
+  amount_usd: number;    // Monto convertido a USD (snapshot al guardar)
   payer_id: string;
   split_mode?: SplitMode;
 };
@@ -31,6 +32,23 @@ export type ExpenseSplit = {
   share_value?: number | null; // % o monto asignado según split_mode
 };
 
+export type SettlementType = 'PAYMENT' | 'FORGIVEN';
+export type SettlementStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
+
+export type Settlement = {
+  id: string;
+  group_id: string;
+  from_id: string; // Quien debía (pagador)
+  to_id: string;   // Quien cobra / perdona (receptor)
+  amount: number;
+  currency: string;
+  amount_usd: number;
+  settlement_type: SettlementType;
+  status: SettlementStatus;
+  notes?: string;
+  created_at: string;
+};
+
 export type Balance = {
   participantId: string;
   name: string;
@@ -40,6 +58,8 @@ export type Balance = {
 export type Transfer = {
   from: string; // name
   to: string;   // name
+  from_id?: string; // id del deudor
+  to_id?: string;   // id del acreedor
   amount: number; // en USD
 };
 
@@ -95,7 +115,8 @@ function distributeRemainderCents(
 export function calculateBalances(
   participants: Participant[],
   expenses: Expense[],
-  splits: ExpenseSplit[]
+  splits: ExpenseSplit[],
+  settlements: Settlement[] = []
 ): Balance[] {
   // Balances en centavos enteros de USD
   const balancesMapCents: Record<string, number> = {};
@@ -196,6 +217,23 @@ export function calculateBalances(
     });
   });
 
+  // Aplicar pagos y condonaciones confirmadas (Muerte a la Deuda)
+  settlements.forEach(settlement => {
+    if (settlement.status === 'CONFIRMED') {
+      const usdAmount = settlement.amount_usd > 0 ? settlement.amount_usd : settlement.amount;
+      const cents = Math.round(usdAmount * 100);
+
+      // El deudor que pagó o fue perdonado reduce su deuda (+ cents)
+      if (balancesMapCents[settlement.from_id] !== undefined) {
+        balancesMapCents[settlement.from_id] += cents;
+      }
+      // El acreedor que cobró o perdonó reduce su saldo a favor (- cents)
+      if (balancesMapCents[settlement.to_id] !== undefined) {
+        balancesMapCents[settlement.to_id] -= cents;
+      }
+    }
+  });
+
   return participants.map(p => ({
     participantId: p.id,
     name: p.name,
@@ -234,6 +272,8 @@ export function calculateSettlement(balances: Balance[]): Transfer[] {
       transfers.push({
         from: debtor.name,
         to: creditor.name,
+        from_id: debtor.participantId,
+        to_id: creditor.participantId,
         amount: roundedAmount,
       });
     }

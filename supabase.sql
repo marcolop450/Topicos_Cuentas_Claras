@@ -5,7 +5,7 @@
 -- ============================================================
 
 -- 1. Limpiar BD anterior
-DROP TABLE IF EXISTS expense_splits, expenses, participants, group_members, groups CASCADE;
+DROP TABLE IF EXISTS settlements, expense_splits, expenses, participants, group_members, groups CASCADE;
 
 -- 2. Tabla de Grupos/Salas
 CREATE TABLE groups (
@@ -25,25 +25,26 @@ CREATE TABLE group_members (
   UNIQUE(group_id, user_id)
 );
 
--- 4. Tabla de participantes (personas nombradas dentro de la sala)
+-- 4. Tabla de participantes en las cuentas (auto-gestionados via trigger o manual)
 CREATE TABLE participants (
-  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  group_id   UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
-  user_id    UUID REFERENCES auth.users(id),  -- nullable: puede ser agregado manual
-  name       TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  group_id    UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
+  user_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- nullable si se agrega sin cuenta
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
--- 5. Tabla de gastos (v3: MultiMoneda)
+-- 5. Tabla de gastos (v4: MultiMoneda + Modos de división + Notas)
 CREATE TABLE expenses (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   group_id    UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
-  description TEXT NOT NULL,
+  description TEXT NOT NULL,                          -- Título del gasto
+  notes       TEXT DEFAULT '',                        -- Descripción / notas detalladas
   amount      NUMERIC(10, 2) NOT NULL,
-  currency    VARCHAR(3) NOT NULL DEFAULT 'BOB',  -- Código ISO 4217
-  amount_usd  NUMERIC(12, 4) NOT NULL DEFAULT 0,  -- Snapshot en USD al momento de guardar
+  currency    VARCHAR(3) NOT NULL DEFAULT 'BOB',      -- Código ISO 4217
+  amount_usd  NUMERIC(12, 4) NOT NULL DEFAULT 0,      -- Snapshot en USD al momento de guardar
   payer_id    UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,
-  split_mode  VARCHAR(20) NOT NULL DEFAULT 'EQUAL', -- EQUAL, PERCENTAGE, CUSTOM, PERSONAL
+  split_mode  VARCHAR(20) NOT NULL DEFAULT 'EQUAL',   -- EQUAL, PERCENTAGE, CUSTOM, PERSONAL
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
@@ -52,7 +53,22 @@ CREATE TABLE expense_splits (
   id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   expense_id     UUID REFERENCES expenses(id) ON DELETE CASCADE NOT NULL,
   participant_id UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,
-  share_value    NUMERIC(10, 2) DEFAULT NULL -- % o monto fijo si aplica
+  share_value    NUMERIC(10, 2) DEFAULT NULL          -- % o monto fijo si aplica
+);
+
+-- 7. Tabla de liquidaciones / pagos de deuda (Muerte a la Deuda)
+CREATE TABLE settlements (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  group_id        UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
+  from_id         UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL, -- Deudor
+  to_id           UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,   -- Acreedor
+  amount          NUMERIC(10, 2) NOT NULL,
+  currency        VARCHAR(3) NOT NULL DEFAULT 'BOB',
+  amount_usd      NUMERIC(12, 4) NOT NULL DEFAULT 0,
+  settlement_type VARCHAR(20) NOT NULL DEFAULT 'PAYMENT', -- PAYMENT o FORGIVEN
+  status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING, CONFIRMED, REJECTED
+  notes           TEXT DEFAULT '',
+  created_at      TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
 -- ============================================================
@@ -207,6 +223,15 @@ CREATE POLICY "members_can_manage_splits"
         SELECT group_id FROM group_members WHERE user_id = auth.uid()
       )
     )
+  );
+
+-- settlements: miembros del grupo pueden operar pagos y condonaciones
+ALTER TABLE settlements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "members_can_manage_settlements"
+  ON settlements FOR ALL
+  USING (
+    group_id IN (SELECT group_id FROM group_members WHERE user_id = auth.uid())
   );
 
 -- ============================================================
