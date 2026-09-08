@@ -53,7 +53,6 @@ export default function CuentaDetailPage() {
   const [settleFromId, setSettleFromId] = useState('');
   const [settleToId, setSettleToId] = useState('');
   const [settleAmount, setSettleAmount] = useState('');
-  const [settleCurrency, setSettleCurrency] = useState('BOB');
   const [settleType, setSettleType] = useState<SettlementType>('PAYMENT');
   const [settleNotes, setSettleNotes] = useState('');
   const [settleLoading, setSettleLoading] = useState(false);
@@ -301,11 +300,11 @@ export default function CuentaDetailPage() {
   function openSettleModal(fromId: string, toId: string, defaultAmountUsd: number, type: SettlementType = 'PAYMENT') {
     setSettleFromId(fromId);
     setSettleToId(toId);
-    const currentRate = rates[currency] || 1;
-    const initialAmount = (defaultAmountUsd * currentRate).toFixed(2);
-    setSettleAmount(initialAmount);
-    setSettleCurrency(currency);
-    setSettleType(type);
+    // La liquidacion final se procesa y consolida estrictamente en DOLARES (USD)
+    setSettleAmount(defaultAmountUsd.toFixed(2));
+    const isDebtor = user && participants.find(p => p.id === fromId)?.user_id === user.id;
+    // Un deudor NUNCA puede abrir el modal para perdonarse su propia deuda
+    setSettleType(isDebtor ? 'PAYMENT' : type);
     setSettleNotes('');
     setSettleError(null);
     setSettleModalOpen(true);
@@ -344,10 +343,34 @@ export default function CuentaDetailPage() {
       return;
     }
 
+    const debtorPart = participants.find(p => p.id === settleFromId);
+    const creditorPart = participants.find(p => p.id === settleToId);
+    const isCreditor = user && creditorPart?.user_id === user.id;
+    const isDebtor = user && debtorPart?.user_id === user.id;
+
+    // VALIDACION: Un deudor jamás puede perdonar su propia deuda
+    if (settleType === 'FORGIVEN') {
+      if (isDebtor) {
+        setSettleError('No puedes perdonar tu propia deuda. Solo el acreedor tiene la potestad de condonarla.');
+        return;
+      }
+      if (debtorPart?.user_id && !isCreditor && group?.owner_id !== user?.id) {
+        setSettleError('Solo el acreedor puede condonar esta deuda.');
+        return;
+      }
+    }
+
     setSettleLoading(true);
-    const usdAmount = toUSD(parsed, settleCurrency, rates);
-    // Si es FORGIVEN (perdonar), queda CONFIRMED directo; si es PAYMENT, queda PENDING
-    const initialStatus: 'PENDING' | 'CONFIRMED' = settleType === 'FORGIVEN' ? 'CONFIRMED' : 'PENDING';
+    // Liquidación final consolidada en USD ($)
+    const usdAmount = parsed;
+
+    // Si quien registra es el acreedor (sea perdonar o marcar cobrado en mano), queda CONFIRMED de inmediato.
+    // Si quien registra es el deudor, queda PENDING para confirmación del acreedor.
+    // Si es el dueño administrando por un participante sin cuenta, queda CONFIRMED.
+    const initialStatus: 'PENDING' | 'CONFIRMED' =
+      (settleType === 'FORGIVEN' || isCreditor || (!debtorPart?.user_id && group?.owner_id === user?.id))
+        ? 'CONFIRMED'
+        : 'PENDING';
 
     try {
       const { data, error } = await supabase.from('settlements').insert([{
@@ -355,7 +378,7 @@ export default function CuentaDetailPage() {
         from_id: settleFromId,
         to_id: settleToId,
         amount: parsed,
-        currency: settleCurrency,
+        currency: 'USD',
         amount_usd: usdAmount,
         settlement_type: settleType,
         status: initialStatus,
@@ -516,8 +539,8 @@ export default function CuentaDetailPage() {
                         </span>
 
                         {Math.abs(balanceVal) > 0.01 && (
-                          <span className={`text-xs font-bold shrink-0 ml-2 ${balanceVal > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {balanceVal > 0 ? '+' : ''}{formatUSD(Math.abs(balanceVal))}
+                          <span className={`text-xs font-bold shrink-0 ml-2 ${balanceVal > 0.001 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {balanceVal > 0.001 ? `+${formatUSD(balanceVal)}` : `-${formatUSD(Math.abs(balanceVal))}`}
                           </span>
                         )}
                       </li>
@@ -862,6 +885,7 @@ export default function CuentaDetailPage() {
                   const toP = participants.find(p => p.id === st.to_id);
                   const isCreditor = user && toP?.user_id === user.id;
                   const isDebtor = user && fromP?.user_id === user.id;
+                  const canConfirm = isCreditor || (!toP?.user_id && isOwner);
 
                   return (
                     <div key={st.id} className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -872,13 +896,13 @@ export default function CuentaDetailPage() {
                             Pago reportado por <span className="underline">{fromP?.name || 'Deudor'}</span> a <span className="underline">{toP?.name || 'Acreedor'}</span>
                           </p>
                           <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                            Monto: <span className="font-bold">{formatOriginal(st.amount, st.currency)}</span> ({formatUSD(st.amount_usd)})
+                            Monto: <span className="font-bold">{formatUSD(st.amount_usd || st.amount)}</span>
                             {st.notes && ` — "${st.notes}"`}
                           </p>
                         </div>
                       </div>
 
-                      {isCreditor ? (
+                      {canConfirm ? (
                         <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
                           <button
                             onClick={() => handleConfirmPayment(st.id)}
@@ -914,8 +938,8 @@ export default function CuentaDetailPage() {
                   {balances.map(b => (
                     <li key={b.participantId} className="flex justify-between items-center p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
                       <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{b.name}</span>
-                      <span className={`text-sm font-bold shrink-0 ${b.balance > 0 ? 'text-emerald-500' : b.balance < 0 ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
-                        {b.balance > 0 ? '+' : ''}{formatUSD(Math.abs(b.balance))}
+                      <span className={`text-sm font-bold shrink-0 ${b.balance > 0.001 ? 'text-emerald-500' : b.balance < -0.001 ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
+                        {b.balance > 0.001 ? `+${formatUSD(b.balance)}` : b.balance < -0.001 ? `-${formatUSD(Math.abs(b.balance))}` : formatUSD(0)}
                       </span>
                     </li>
                   ))}
@@ -945,39 +969,88 @@ export default function CuentaDetailPage() {
                   </div>
                 ) : (
                   <ul className="space-y-3">
-                    {settlements.map((t, i) => (
-                      <li key={i} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-semibold text-red-500 flex-1 truncate text-right">{t.from}</span>
-                          <div className="flex flex-col items-center shrink-0">
-                            <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">paga</span>
-                            <div className="flex items-center gap-1.5 bg-[var(--bg-card)] px-2.5 py-1 rounded-md border border-[var(--border)]">
-                              <span className="text-sm font-bold text-[var(--text-primary)] whitespace-nowrap">{formatUSD(t.amount)}</span>
-                              <ArrowRight size={13} className="text-[var(--text-muted)]" />
-                            </div>
-                          </div>
-                          <span className="text-sm font-semibold text-emerald-500 flex-1 truncate">{t.to}</span>
-                        </div>
+                    {settlements.map((t, i) => {
+                      const debtorPart = participants.find(p => p.id === t.from_id);
+                      const creditorPart = participants.find(p => p.id === t.to_id);
+                      const isDebtor = user && debtorPart?.user_id === user.id;
+                      const isCreditor = user && creditorPart?.user_id === user.id;
 
-                        {/* Botones de Muerte a la Deuda (Pagar o Perdonar) */}
-                        <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)] justify-end">
-                          <button
-                            type="button"
-                            onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                            className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1"
-                          >
-                            Pagar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
-                            className="text-xs bg-[var(--bg-card)] hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1"
-                          >
-                            Perdonar
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                      return (
+                        <li key={i} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-red-500 flex-1 truncate text-right">{t.from}</span>
+                            <div className="flex flex-col items-center shrink-0">
+                              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">paga</span>
+                              <div className="flex items-center gap-1.5 bg-[var(--bg-card)] px-2.5 py-1 rounded-md border border-[var(--border)]">
+                                <span className="text-sm font-bold text-[var(--text-primary)] whitespace-nowrap">{formatUSD(t.amount)}</span>
+                                <ArrowRight size={13} className="text-[var(--text-muted)]" />
+                              </div>
+                            </div>
+                            <span className="text-sm font-semibold text-emerald-500 flex-1 truncate">{t.to}</span>
+                          </div>
+
+                          {/* Acciones de liquidación según rol: el deudor solo reporta pago; solo el acreedor perdona */}
+                          <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)] justify-end">
+                            {isDebtor && (
+                              <button
+                                type="button"
+                                onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
+                              >
+                                Reportar Pago
+                              </button>
+                            )}
+
+                            {isCreditor && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
+                                  title="Registrar que ya recibiste este pago"
+                                >
+                                  Registrar Cobro
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
+                                  className="text-xs bg-[var(--bg-card)] hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
+                                  title="Condonar/perdonar la deuda a este participante"
+                                >
+                                  Perdonar
+                                </button>
+                              </>
+                            )}
+
+                            {!isDebtor && !isCreditor && isOwner && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                  className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
+                                >
+                                  Registrar Pago
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
+                                  className="text-xs bg-[var(--bg-card)] hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
+                                  title="Perdonar deuda (como administrador en nombre del acreedor)"
+                                >
+                                  Perdonar (Acreedor)
+                                </button>
+                              </>
+                            )}
+
+                            {!isDebtor && !isCreditor && !isOwner && (
+                              <span className="text-[11px] text-[var(--text-muted)] italic">
+                                Pendiente
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -1016,121 +1089,143 @@ export default function CuentaDetailPage() {
         )}
 
         {/* MODAL PARA PAGAR O PERDONAR DEUDA (MUERTE A LA DEUDA) */}
-        {settleModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150">
-            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-xl space-y-4">
-              <div className="flex justify-between items-center border-b border-[var(--border)] pb-3">
-                <h3 className="text-base font-semibold text-[var(--text-primary)]">
-                  {settleType === 'PAYMENT' ? 'Registrar Pago de Deuda' : 'Perdonar Deuda (Condonacion)'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setSettleModalOpen(false)}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+        {settleModalOpen && (() => {
+          const debtorPart = participants.find(p => p.id === settleFromId);
+          const creditorPart = participants.find(p => p.id === settleToId);
+          const isDebtorInModal = user && debtorPart?.user_id === user.id;
+          const isCreditorInModal = user && creditorPart?.user_id === user.id;
 
-              <form onSubmit={handleSaveSettlement} className="space-y-3">
-                <FormError message={settleError} />
-
-                <div className="text-xs p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] space-y-1">
-                  <p className="text-[var(--text-secondary)]">
-                    <span className="font-semibold text-red-500">Deudor:</span> {participants.find(p => p.id === settleFromId)?.name || 'Deudor'}
-                  </p>
-                  <p className="text-[var(--text-secondary)]">
-                    <span className="font-semibold text-emerald-500">Acreedor:</span> {participants.find(p => p.id === settleToId)?.name || 'Acreedor'}
-                  </p>
-                </div>
-
-                {/* Tipo de operacion */}
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tipo de operacion</label>
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] text-xs font-medium">
-                    <button
-                      type="button"
-                      onClick={() => setSettleType('PAYMENT')}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'PAYMENT' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Registrar Pago
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSettleType('FORGIVEN')}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'FORGIVEN' ? 'bg-amber-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Perdonar Deuda
-                    </button>
-                  </div>
-                </div>
-
-                {/* Monto y Moneda */}
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                    Monto ({settleType === 'PAYMENT' ? 'a pagar' : 'a perdonar'})
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={settleAmount}
-                      onChange={e => setSettleAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="flex-1 px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                    <select
-                      value={settleCurrency}
-                      onChange={e => setSettleCurrency(e.target.value)}
-                      className="px-2 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] font-medium"
-                    >
-                      {SUPPORTED_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                    Puedes ingresar un pago parcial o el total.
-                  </p>
-                </div>
-
-                {/* Notas opcionales */}
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Notas (opcional)</label>
-                  <input
-                    type="text"
-                    value={settleNotes}
-                    onChange={e => setSettleNotes(e.target.value)}
-                    placeholder="Ej. Transferencia QR bancaria, efectivo"
-                    className="w-full px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="text-[11px] p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-[var(--text-secondary)]">
-                  {settleType === 'PAYMENT'
-                    ? 'Al guardar, se enviara un aviso para que el acreedor confirme que recibio el dinero antes de cancelar la deuda.'
-                    : 'Al perdonar, la deuda quedara condonada de inmediato y el balance de la sala se actualizara.'}
-                </div>
-
-                <div className="flex gap-2 pt-2">
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150">
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-xl space-y-4">
+                <div className="flex justify-between items-center border-b border-[var(--border)] pb-3">
+                  <h3 className="text-base font-semibold text-[var(--text-primary)]">
+                    {settleType === 'PAYMENT'
+                      ? (isDebtorInModal ? 'Reportar Pago de Deuda' : 'Registrar Pago')
+                      : 'Perdonar Deuda (Condonacion)'}
+                  </h3>
                   <button
                     type="button"
                     onClick={() => setSettleModalOpen(false)}
-                    className="flex-1 py-2 px-4 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
                   >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={settleLoading}
-                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 ${settleType === 'PAYMENT' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-amber-500 hover:bg-amber-600'}`}
-                  >
-                    {settleLoading ? 'Guardando...' : settleType === 'PAYMENT' ? 'Reportar Pago' : 'Confirmar Perdon'}
+                    <X size={18} />
                   </button>
                 </div>
-              </form>
+
+                <form onSubmit={handleSaveSettlement} className="space-y-3">
+                  <FormError message={settleError} />
+
+                  <div className="text-xs p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] space-y-1">
+                    <p className="text-[var(--text-secondary)]">
+                      <span className="font-semibold text-red-500">Deudor:</span> {debtorPart?.name || 'Deudor'} {isDebtorInModal && '(Tu)'}
+                    </p>
+                    <p className="text-[var(--text-secondary)]">
+                      <span className="font-semibold text-emerald-500">Acreedor:</span> {creditorPart?.name || 'Acreedor'} {isCreditorInModal && '(Tu)'}
+                    </p>
+                  </div>
+
+                  {/* Tipo de operacion: El deudor NUNCA puede perdonar su propia deuda */}
+                  {isDebtorInModal ? (
+                    <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-500/10 rounded-lg border border-indigo-100 dark:border-indigo-500/20 text-xs">
+                      <p className="font-semibold text-indigo-700 dark:text-indigo-300">Reporte de Pago</p>
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                        Como deudor, reportas que realizaste el pago a {creditorPart?.name || 'tu acreedor'}. Se le solicitará confirmación para cancelar la deuda.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                        {isCreditorInModal ? 'Accion como acreedor' : 'Tipo de operacion'}
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] text-xs font-medium">
+                        <button
+                          type="button"
+                          onClick={() => setSettleType('PAYMENT')}
+                          className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'PAYMENT' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                        >
+                          {isCreditorInModal ? 'Registrar Cobro' : 'Registrar Pago'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSettleType('FORGIVEN')}
+                          className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'FORGIVEN' ? 'bg-amber-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                        >
+                          Perdonar Deuda
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Monto y Moneda fija en USD */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                      Monto ({settleType === 'PAYMENT' ? 'a pagar' : 'a perdonar'})
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={settleAmount}
+                        onChange={e => setSettleAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="flex-1 px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                      <div className="px-3 py-2 text-sm font-bold border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] flex items-center justify-center min-w-[75px]">
+                        USD ($)
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                      La liquidacion final se consolida y procesa en Dolares (USD).
+                    </p>
+                  </div>
+
+                  {/* Notas opcionales */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Notas (opcional)</label>
+                    <input
+                      type="text"
+                      value={settleNotes}
+                      onChange={e => setSettleNotes(e.target.value)}
+                      placeholder="Ej. Transferencia QR, efectivo"
+                      className="w-full px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="text-[11px] p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-[var(--text-secondary)]">
+                    {settleType === 'PAYMENT'
+                      ? (isDebtorInModal
+                          ? 'Al reportar, se enviara un aviso para que el acreedor confirme la recepcion del dinero.'
+                          : 'Al guardar, el cobro se confirmara inmediatamente y la deuda quedara saldada.')
+                      : 'Al perdonar, la deuda quedara condonada de inmediato y el balance de la sala se actualizara.'}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSettleModalOpen(false)}
+                      className="flex-1 py-2 px-4 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={settleLoading}
+                      className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 ${settleType === 'PAYMENT' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                    >
+                      {settleLoading
+                        ? 'Guardando...'
+                        : settleType === 'PAYMENT'
+                          ? (isDebtorInModal ? 'Reportar Pago' : 'Confirmar Cobro')
+                          : 'Confirmar Perdon'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

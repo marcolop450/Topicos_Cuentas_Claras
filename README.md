@@ -116,3 +116,11 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 ## 2026-09-08 11:27:13
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Confirmacion requerida: cuando el deudor registra un pago, debe quedar pendiente de confirmacion del acreedor para que recien desaparezca dicha deuda
+
+## 2026-09-08 11:36:20
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Pasa pruebas para estas personas (Marco Alejandro Lopez Velasquez, Lopez, Manu, Juan)
+
+## 2026-09-08 11:40:51
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Recordar que la liquidacion es en Dolares al Final y Ahora por que el deudor pueda perdonar su deuda, Revisa toda la LOGICA, Y REVISA TODO EL PROYECTO PARA GENERAR PRUEBAS CORRECTAS Y SIN ERRPRES
