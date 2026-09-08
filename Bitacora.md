@@ -143,3 +143,13 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Alto, no me toques el SW1
 
+## 2026-09-08 12:19:40
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Otro fallo de logica, si elimino o reincio, Se habilita la deuda, y tambien me referia a estructurar el frontend, que sea nuevo el tema, Que tenga orden, tiienes permiso para mandarme que cambio yo en la BD no uses el MCP, y otra cosa es como rehacer el frontend, manteniendo la Logica y arreglando errores y colocar animaciones
+
+## 2026-09-08 12:24:29
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Toma la BD actual (schema con settlement_type y notes) podes rehacer y inicia
+
+
+

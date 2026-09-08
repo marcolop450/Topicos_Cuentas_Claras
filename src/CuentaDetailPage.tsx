@@ -3,7 +3,27 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit, SplitMode, Settlement, SettlementType } from './utils';
-import { Trash2, Edit2, Users, Receipt, Calculator, AlertCircle, FolderOpen, ArrowRight, MessageCircle, RefreshCw, Clock, Check, X, Copy, CheckCheck } from 'lucide-react';
+import {
+  Trash2,
+  Edit2,
+  Users,
+  Receipt,
+  AlertCircle,
+  ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  Check,
+  X,
+  Copy,
+  CheckCheck,
+  Plus,
+  Share2,
+  HeartHandshake,
+  DollarSign,
+  RotateCcw,
+  ShieldCheck,
+  Coins,
+} from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -12,17 +32,40 @@ import {
   formatOriginal,
   formatUSD,
   SUPPORTED_CURRENCIES,
+  CURRENCY_SYMBOLS,
 } from './hooks/useExchangeRates';
 import type { RatesMap } from './hooks/useExchangeRates';
 
 type GroupFull = Group & { join_code: string; owner_id: string };
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getAvatarColor(name: string): string {
+  const colors = [
+    'from-indigo-500 to-indigo-600',
+    'from-emerald-500 to-emerald-600',
+    'from-amber-500 to-amber-600',
+    'from-rose-500 to-rose-600',
+    'from-cyan-500 to-cyan-600',
+    'from-purple-500 to-purple-600',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
 
 export default function CuentaDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
 
-  // Extract join code: last 6 chars after the last dash
+  // Código de unión: últimos 6 caracteres
   const joinCode = slug ? slug.slice(-6).toUpperCase() : '';
 
   const [group, setGroup] = useState<GroupFull | null>(null);
@@ -32,13 +75,15 @@ export default function CuentaDetailPage() {
   const [settlementRecords, setSettlementRecords] = useState<Settlement[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Tipos de cambio
+  // Tasas de cambio
   const [rates, setRates] = useState<RatesMap>({ USD: 1 });
-  const [ratesFromFallback, setRatesFromFallback] = useState(false);
-  const [ratesLoading, setRatesLoading] = useState(false);
   const ratesLoadedRef = useRef(false);
 
-  // Formulario de gasto
+  // Navegación de pestañas
+  const [activeTab, setActiveTab] = useState<'expenses' | 'settlement' | 'participants'>('expenses');
+
+  // Formulario de gastos
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [amount, setAmount] = useState('');
@@ -59,74 +104,99 @@ export default function CuentaDetailPage() {
   const [settleLoading, setSettleLoading] = useState(false);
   const [settleError, setSettleError] = useState<string | null>(null);
 
+  // Participante nuevo
+  const [newPartName, setNewPartName] = useState('');
   const [loading, setLoading] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'participants' | 'expenses' | 'balances'>('participants');
+  const [addPartError, setAddPartError] = useState<string | null>(null);
+
   const { modal, showConfirm, closeConfirm } = useConfirmModal();
 
-  useEffect(() => { if (joinCode) fetchAll(joinCode); }, [joinCode]);
-  useEffect(() => { setFormError(null); }, [activeTab]);
-
-  async function loadRates() {
-    setRatesLoading(true);
-    try {
-      const result = await fetchRatesFromUSD();
-      setRates(result.rates);
-      setRatesFromFallback(result.fromFallback);
-    } finally {
-      setRatesLoading(false);
-    }
-  }
+  useEffect(() => {
+    if (joinCode) fetchAll(joinCode);
+  }, [joinCode]);
 
   async function fetchAll(code: string) {
     setLoading(true);
     try {
-      // Cargar tasas de cambio (una sola vez por sesion)
       if (!ratesLoadedRef.current) {
         ratesLoadedRef.current = true;
         const result = await fetchRatesFromUSD();
         setRates(result.rates);
-        setRatesFromFallback(result.fromFallback);
       }
 
       const { data: found } = await supabase.rpc('find_group_by_code', { p_code: code });
-      if (!found || found.length === 0) { navigate('/cuentas'); return; }
+      if (!found || found.length === 0) {
+        navigate('/cuentas');
+        return;
+      }
       const groupId = found[0].id;
 
       const { data: gData } = await supabase.from('groups').select('*').eq('id', groupId).single();
-      const { data: pData } = await supabase.from('participants').select('*').eq('group_id', groupId).order('created_at', { ascending: true });
-      const { data: eData } = await supabase.from('expenses').select('*').eq('group_id', groupId).order('created_at', { ascending: false });
+      const { data: pData } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('created_at', { ascending: true });
+      const { data: eData } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('created_at', { ascending: false });
       const { data: sData } = await supabase.from('expense_splits').select('*');
+
       let stData: Settlement[] = [];
       try {
-        const { data } = await supabase.from('settlements').select('*').eq('group_id', groupId).order('created_at', { ascending: false });
+        const { data } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('group_id', groupId)
+          .order('created_at', { ascending: false });
         if (data) stData = data;
       } catch (e) {
         console.warn('Could not fetch settlements:', e);
       }
 
-      if (!gData) { navigate('/cuentas'); return; }
+      if (!gData) {
+        navigate('/cuentas');
+        return;
+      }
       setGroup(gData);
       setParticipants(pData || []);
       setExpenses(eData || []);
       setSplits(sData || []);
       setSettlementRecords(stData);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleCopyCode() {
+    if (!joinCode) return;
+    navigator.clipboard.writeText(joinCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  }
+
+  function handleShareWhatsApp() {
+    if (!group) return;
+    const text = `Hola! Te invito a unirte a nuestra sala de gastos "${group.name}" en Cuentas Claras. Usa el codigo: ${group.join_code} o ingresa directamente.`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
 
   async function handleLeaveGroup() {
     if (!user || !group) return;
-
     const myParticipant = participants.find(p => p.user_id === user.id);
     if (myParticipant) {
       const balances = calculateBalances(participants, expenses, splits, settlementRecords);
-      const myBalance = balances.find(b => b.participantId === myParticipant.id);
-
-      if (myBalance && Math.abs(myBalance.balance) > 0.01) {
-        if (myBalance.balance > 0) {
-          setFormError(`No puedes salir: la sala te debe ${formatUSD(myBalance.balance)}.`);
+      const myBal = balances.find(b => b.participantId === myParticipant.id);
+      if (myBal && Math.abs(myBal.balance) > 0.01) {
+        if (myBal.balance > 0) {
+          setFormError(`No puedes salir: la sala te debe ${formatUSD(myBal.balance)}.`);
         } else {
-          setFormError(`No puedes salir: tienes una deuda de ${formatUSD(Math.abs(myBalance.balance))}.`);
+          setFormError(`No puedes salir: tienes una deuda de ${formatUSD(Math.abs(myBal.balance))}.`);
         }
         return;
       }
@@ -142,15 +212,71 @@ export default function CuentaDetailPage() {
     });
   }
 
-  async function saveExpense(e: React.FormEvent) {
+  // --- GASTOS ---
+  function resetExpenseForm() {
+    setDescription('');
+    setNotes('');
+    setAmount('');
+    setCurrency('BOB');
+    setPayerId('');
+    setSelectedParticipants([]);
+    setSplitMode('EQUAL');
+    setCustomShares({});
+    setEditingExpenseId(null);
+    setIsExpenseFormOpen(false);
+    setFormError(null);
+  }
+
+  function handleStartAddExpense() {
+    resetExpenseForm();
+    if (participants.length > 0) {
+      setSelectedParticipants(participants.map(p => p.id));
+      const myPart = participants.find(p => p.user_id === user?.id);
+      if (myPart) setPayerId(myPart.id);
+      else setPayerId(participants[0].id);
+    }
+    setIsExpenseFormOpen(true);
+  }
+
+  function handleEditExpense(expense: Expense) {
+    setDescription(expense.description);
+    setNotes(expense.notes || '');
+    setAmount(expense.amount.toString());
+    setCurrency(expense.currency || 'BOB');
+    setPayerId(expense.payer_id);
+    setSplitMode(expense.split_mode || 'EQUAL');
+    setEditingExpenseId(expense.id);
+
+    const expenseSplits = splits.filter(s => s.expense_id === expense.id);
+    setSelectedParticipants(expenseSplits.map(s => s.participant_id));
+
+    const shares: Record<string, string> = {};
+    expenseSplits.forEach(s => {
+      if (s.share_value != null) {
+        shares[s.participant_id] = s.share_value.toString();
+      }
+    });
+    setCustomShares(shares);
+    setIsExpenseFormOpen(true);
+    setFormError(null);
+  }
+
+  async function handleSaveExpense(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!description.trim()) { setFormError('La descripcion es obligatoria.'); return; }
-    if (!amount || parseFloat(amount) <= 0) { setFormError('Ingresa un monto valido.'); return; }
-    if (!payerId) { setFormError('Selecciona quien pago.'); return; }
-
+    if (!description.trim()) {
+      setFormError('La descripcion es obligatoria.');
+      return;
+    }
     const parsedAmount = parseFloat(amount);
-    const computedAmountUsd = toUSD(parsedAmount, currency, rates);
+    if (!parsedAmount || parsedAmount <= 0) {
+      setFormError('Ingresa un monto valido.');
+      return;
+    }
+    if (!payerId) {
+      setFormError('Selecciona quien pago.');
+      return;
+    }
 
     let activeParticipants = selectedParticipants;
     if (splitMode === 'PERSONAL') {
@@ -163,60 +289,37 @@ export default function CuentaDetailPage() {
     }
 
     if (splitMode === 'PERCENTAGE') {
-      const sumPct = activeParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+      const sumPct = activeParticipants.reduce(
+        (acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0),
+        0
+      );
       if (Math.abs(sumPct - 100) > 0.1) {
-        setFormError(`La suma de los porcentajes debe ser 100% (actual: ${sumPct.toFixed(1)}%).`);
+        setFormError(`La suma de los porcentajes debe ser exactamente 100% (actual: ${sumPct.toFixed(1)}%).`);
         return;
       }
     }
 
     if (splitMode === 'CUSTOM') {
-      const sumCustom = activeParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+      const sumCustom = activeParticipants.reduce(
+        (acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0),
+        0
+      );
       if (Math.abs(sumCustom - parsedAmount) > 0.05) {
-        setFormError(`La suma de los montos debe ser igual al total ${parsedAmount.toFixed(2)} ${currency} (actual: ${sumCustom.toFixed(2)}).`);
+        setFormError(
+          `La suma de los montos debe ser igual al total ${parsedAmount.toFixed(2)} ${currency} (actual: ${sumCustom.toFixed(2)}).`
+        );
         return;
       }
     }
 
+    const computedAmountUsd = toUSD(parsedAmount, currency, rates);
+
     try {
       if (editingExpenseId) {
-        await supabase.from('expenses').update({
-          description: description.trim(),
-          notes: notes.trim(),
-          amount: parsedAmount,
-          currency,
-          amount_usd: computedAmountUsd,
-          payer_id: payerId,
-          split_mode: splitMode,
-        }).eq('id', editingExpenseId);
-
-        await supabase.from('expense_splits').delete().eq('expense_id', editingExpenseId);
-
-        const splitsPayload = activeParticipants.map(pId => ({
-          expense_id: editingExpenseId,
-          participant_id: pId,
-          share_value: (splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM')
-            ? parseFloat(customShares[pId] || '0')
-            : null,
-        }));
-
-        const { data: splData } = await supabase
-          .from('expense_splits')
-          .insert(splitsPayload)
-          .select();
-
-        setExpenses(expenses.map(exp =>
-          exp.id === editingExpenseId
-            ? { ...exp, description: description.trim(), notes: notes.trim(), amount: parsedAmount, currency, amount_usd: computedAmountUsd, payer_id: payerId, split_mode: splitMode }
-            : exp
-        ));
-        setSplits([...splits.filter(s => s.expense_id !== editingExpenseId), ...(splData || [])]);
-        setEditingExpenseId(null);
-      } else {
-        const { data: expData } = await supabase
+        // Actualizar gasto
+        const { error: expError } = await supabase
           .from('expenses')
-          .insert([{
-            group_id: group?.id,
+          .update({
             description: description.trim(),
             notes: notes.trim(),
             amount: parsedAmount,
@@ -224,157 +327,136 @@ export default function CuentaDetailPage() {
             amount_usd: computedAmountUsd,
             payer_id: payerId,
             split_mode: splitMode,
-          }])
-          .select();
+          })
+          .eq('id', editingExpenseId);
 
-        const newExp = expData![0];
+        if (expError) throw expError;
 
-        const splitsPayload = activeParticipants.map(pId => ({
-          expense_id: newExp.id,
+        // Reemplazar splits
+        await supabase.from('expense_splits').delete().eq('expense_id', editingExpenseId);
+
+        const newSplits = activeParticipants.map(pId => ({
+          expense_id: editingExpenseId,
           participant_id: pId,
-          share_value: (splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM')
-            ? parseFloat(customShares[pId] || '0')
-            : null,
+          share_value:
+            splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM'
+              ? parseFloat(customShares[pId] || '0')
+              : null,
         }));
 
-        const { data: splData } = await supabase
+        const { data: insertedSplits, error: splitError } = await supabase
           .from('expense_splits')
-          .insert(splitsPayload)
+          .insert(newSplits)
           .select();
 
-        setExpenses([newExp, ...expenses]);
-        setSplits([...splits, ...(splData || [])]);
+        if (splitError) throw splitError;
+
+        setExpenses(
+          expenses.map(e =>
+            e.id === editingExpenseId
+              ? {
+                  ...e,
+                  description: description.trim(),
+                  notes: notes.trim(),
+                  amount: parsedAmount,
+                  currency,
+                  amount_usd: computedAmountUsd,
+                  payer_id: payerId,
+                  split_mode: splitMode,
+                }
+              : e
+          )
+        );
+
+        setSplits([...splits.filter(s => s.expense_id !== editingExpenseId), ...(insertedSplits || [])]);
+      } else {
+        // Insertar nuevo gasto
+        const { data: expData, error: expError } = await supabase
+          .from('expenses')
+          .insert([
+            {
+              group_id: group?.id,
+              description: description.trim(),
+              notes: notes.trim(),
+              amount: parsedAmount,
+              currency,
+              amount_usd: computedAmountUsd,
+              payer_id: payerId,
+              split_mode: splitMode,
+            },
+          ])
+          .select();
+
+        if (expError) throw expError;
+        const newExpense = expData[0];
+
+        const newSplits = activeParticipants.map(pId => ({
+          expense_id: newExpense.id,
+          participant_id: pId,
+          share_value:
+            splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM'
+              ? parseFloat(customShares[pId] || '0')
+              : null,
+        }));
+
+        const { data: insertedSplits, error: splitError } = await supabase
+          .from('expense_splits')
+          .insert(newSplits)
+          .select();
+
+        if (splitError) throw splitError;
+
+        setExpenses([newExpense, ...expenses]);
+        setSplits([...splits, ...(insertedSplits || [])]);
       }
-      setDescription('');
-      setNotes('');
-      setAmount('');
-      setCurrency('BOB');
-      setSplitMode('EQUAL');
-      setCustomShares({});
-    } catch { setFormError('Error guardando gasto.'); }
-  }
 
-  function startEditExpense(exp: Expense) {
-    setFormError(null);
-    setEditingExpenseId(exp.id);
-    setDescription(exp.description);
-    setNotes(exp.notes || '');
-    setAmount(exp.amount.toString());
-    setCurrency(exp.currency || 'BOB');
-    setPayerId(exp.payer_id);
-    const mode = exp.split_mode || 'EQUAL';
-    setSplitMode(mode);
-
-    const expSplits = splits.filter(s => s.expense_id === exp.id);
-    setSelectedParticipants(expSplits.map(s => s.participant_id));
-
-    const shares: Record<string, string> = {};
-    expSplits.forEach(s => {
-      if (s.share_value != null) {
-        shares[s.participant_id] = s.share_value.toString();
-      }
-    });
-    setCustomShares(shares);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function cancelEdit() {
-    setFormError(null);
-    setEditingExpenseId(null);
-    setDescription('');
-    setNotes('');
-    setAmount('');
-    setCurrency('BOB');
-    setSplitMode('EQUAL');
-    setCustomShares({});
+      resetExpenseForm();
+    } catch (err: any) {
+      setFormError('Error al guardar gasto: ' + (err.message || err));
+    }
   }
 
   function handleDeleteExpense(expenseId: string) {
-    showConfirm('Eliminar Gasto', 'Esto afectara los balances de los participantes.', async () => {
-      try {
-        const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
-        if (error) {
-          setFormError('Error al eliminar gasto: ' + error.message);
-          return;
-        }
-        const updatedExpenses = expenses.filter(e => e.id !== expenseId);
-        setExpenses(updatedExpenses);
-        setSplits(splits.filter(s => s.expense_id !== expenseId));
+    showConfirm(
+      'Eliminar Gasto',
+      '¿Seguro que deseas eliminar este gasto? Los balances de los participantes se recalcularan.',
+      async () => {
+        try {
+          const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+          if (error) throw error;
 
-        // Si ya no quedan gastos, limpiar automáticamente las liquidaciones huérfanas
-        if (updatedExpenses.length === 0 && settlementRecords.length > 0 && group?.id) {
-          await supabase.from('settlements').delete().eq('group_id', group.id);
-          setSettlementRecords([]);
+          const updatedExpenses = expenses.filter(e => e.id !== expenseId);
+          setExpenses(updatedExpenses);
+          setSplits(splits.filter(s => s.expense_id !== expenseId));
+
+          // Si ya no quedan gastos en la sala, limpiar liquidaciones huérfanas
+          if (updatedExpenses.length === 0 && group?.id) {
+            await supabase.from('settlements').delete().eq('group_id', group.id);
+            setSettlementRecords([]);
+          }
+        } catch (err: any) {
+          setFormError('Error al eliminar gasto: ' + (err.message || err));
         }
-      } catch (err: any) {
-        setFormError('Error al eliminar gasto: ' + (err.message || err));
       }
-    });
+    );
   }
 
-  async function handleDeleteSettlement(settlementId: string) {
-    showConfirm('Eliminar Liquidacion', '¿Deseas eliminar este registro de pago o condonacion?', async () => {
-      try {
-        const { error } = await supabase.from('settlements').delete().eq('id', settlementId);
-        if (error) {
-          setFormError('Error al eliminar liquidacion: ' + error.message);
-          return;
-        }
-        setSettlementRecords(settlementRecords.filter(s => s.id !== settlementId));
-      } catch (err: any) {
-        setFormError('Error al eliminar liquidacion: ' + (err.message || err));
-      }
-    });
-  }
-
-  async function handleClearAllSettlements() {
-    showConfirm('Reiniciar Liquidaciones', '¿Eliminar todos los registros de pago y perdon para dejar las deudas en cero?', async () => {
-      try {
-        if (!group?.id) return;
-        const { error } = await supabase.from('settlements').delete().eq('group_id', group.id);
-        if (error) {
-          setFormError('Error al reiniciar liquidaciones: ' + error.message);
-          return;
-        }
-        setSettlementRecords([]);
-      } catch (err: any) {
-        setFormError('Error: ' + (err.message || err));
-      }
-    });
-  }
-
-  // --- MUERTE A LA DEUDA: Funciones de Liquidación y Confirmación ---
-  function openSettleModal(fromId: string, toId: string, defaultAmountUsd: number, type: SettlementType = 'PAYMENT') {
+  // --- LIQUIDACION Y MUERTE A LA DEUDA ---
+  function openSettleModal(
+    fromId: string,
+    toId: string,
+    defaultAmountUsd: number,
+    type: SettlementType = 'PAYMENT'
+  ) {
     setSettleFromId(fromId);
     setSettleToId(toId);
-    // La liquidacion final se procesa y consolida estrictamente en DOLARES (USD)
     setSettleAmount(defaultAmountUsd.toFixed(2));
     const isDebtor = user && participants.find(p => p.id === fromId)?.user_id === user.id;
-    // Un deudor NUNCA puede abrir el modal para perdonarse su propia deuda
+    // Un deudor jamás puede abrir para perdonarse su propia deuda
     setSettleType(isDebtor ? 'PAYMENT' : type);
     setSettleNotes('');
     setSettleError(null);
     setSettleModalOpen(true);
-  }
-
-  async function handleConfirmPayment(settlementId: string) {
-    try {
-      await supabase.from('settlements').update({ status: 'CONFIRMED' }).eq('id', settlementId);
-      setSettlementRecords(settlementRecords.map(s => s.id === settlementId ? { ...s, status: 'CONFIRMED' } : s));
-    } catch {
-      setFormError('Error al confirmar el pago.');
-    }
-  }
-
-  async function handleRejectPayment(settlementId: string) {
-    showConfirm('Rechazar Pago', '¿Confirmas que no recibiste este pago?', async () => {
-      try {
-        await supabase.from('settlements').update({ status: 'REJECTED' }).eq('id', settlementId);
-        setSettlementRecords(settlementRecords.map(s => s.id === settlementId ? { ...s, status: 'REJECTED' } : s));
-      } catch {
-        setFormError('Error al rechazar el pago.');
-      }
-    });
   }
 
   async function handleSaveSettlement(e: React.FormEvent) {
@@ -395,10 +477,9 @@ export default function CuentaDetailPage() {
     const isCreditor = user && creditorPart?.user_id === user.id;
     const isDebtor = user && debtorPart?.user_id === user.id;
 
-    // VALIDACION: Un deudor jamás puede perdonar su propia deuda
     if (settleType === 'FORGIVEN') {
       if (isDebtor) {
-        setSettleError('No puedes perdonar tu propia deuda. Solo el acreedor tiene la potestad de condonarla.');
+        setSettleError('No puedes perdonar tu propia deuda. Solo el acreedor puede condonarla.');
         return;
       }
       if (debtorPart?.user_id && !isCreditor && group?.owner_id !== user?.id) {
@@ -408,29 +489,32 @@ export default function CuentaDetailPage() {
     }
 
     setSettleLoading(true);
-    // Liquidación final consolidada en USD ($)
     const usdAmount = parsed;
 
-    // Si quien registra es el acreedor (sea perdonar o marcar cobrado en mano), queda CONFIRMED de inmediato.
-    // Si quien registra es el deudor, queda PENDING para confirmación del acreedor.
-    // Si es el dueño administrando por un participante sin cuenta, queda CONFIRMED.
+    // Si quien registra es el acreedor o el admin de la sala, queda CONFIRMED.
+    // Si quien reporta es el deudor, queda PENDING para validación del acreedor.
     const initialStatus: 'PENDING' | 'CONFIRMED' =
-      (settleType === 'FORGIVEN' || isCreditor || (!debtorPart?.user_id && group?.owner_id === user?.id))
+      settleType === 'FORGIVEN' || isCreditor || (!debtorPart?.user_id && group?.owner_id === user?.id)
         ? 'CONFIRMED'
         : 'PENDING';
 
     try {
-      const { data, error } = await supabase.from('settlements').insert([{
-        group_id: group?.id,
-        from_id: settleFromId,
-        to_id: settleToId,
-        amount: parsed,
-        currency: 'USD',
-        amount_usd: usdAmount,
-        settlement_type: settleType,
-        status: initialStatus,
-        notes: settleNotes.trim(),
-      }]).select();
+      const { data, error } = await supabase
+        .from('settlements')
+        .insert([
+          {
+            group_id: group?.id,
+            from_id: settleFromId,
+            to_id: settleToId,
+            amount: parsed,
+            currency: 'USD',
+            amount_usd: usdAmount,
+            settlement_type: settleType,
+            status: initialStatus,
+            notes: settleNotes.trim(),
+          },
+        ])
+        .select();
 
       if (error) throw error;
       if (data && data[0]) {
@@ -438,410 +522,616 @@ export default function CuentaDetailPage() {
       }
       setSettleModalOpen(false);
     } catch (err: any) {
-      setSettleError(err.message || 'Error registrando la liquidacion. Verifica el script SQL.');
+      setSettleError(err.message || 'Error al registrar la liquidacion.');
     } finally {
       setSettleLoading(false);
     }
   }
 
+  async function handleConfirmPayment(settlementId: string) {
+    try {
+      const { error } = await supabase
+        .from('settlements')
+        .update({ status: 'CONFIRMED' })
+        .eq('id', settlementId);
+      if (error) throw error;
+
+      setSettlementRecords(
+        settlementRecords.map(s => (s.id === settlementId ? { ...s, status: 'CONFIRMED' } : s))
+      );
+    } catch (err: any) {
+      setFormError('Error al confirmar pago: ' + (err.message || err));
+    }
+  }
+
+  async function handleRejectPayment(settlementId: string) {
+    showConfirm(
+      'Rechazar Pago',
+      '¿Confirmas que no recibiste este pago? Se eliminara la solicitud y la deuda permanecera abierta.',
+      async () => {
+        try {
+          const { error } = await supabase.from('settlements').delete().eq('id', settlementId);
+          if (error) throw error;
+          setSettlementRecords(settlementRecords.filter(s => s.id !== settlementId));
+        } catch (err: any) {
+          setFormError('Error al rechazar pago: ' + (err.message || err));
+        }
+      }
+    );
+  }
+
+  // Saldar todas las deudas pendientes de golpe (marca todo en 0.00)
+  async function handleSettleAllDebts() {
+    if (!group?.id || settlements.length === 0) return;
+    showConfirm(
+      'Saldar Todas las Deudas',
+      '¿Deseas marcar como saldadas todas las deudas pendientes de esta sala? Todos los participantes quedaran en $0.00 inmediatamente.',
+      async () => {
+        try {
+          const newSettlements = settlements.map(t => ({
+            group_id: group.id,
+            from_id: t.from_id,
+            to_id: t.to_id,
+            amount: t.amount,
+            currency: 'USD',
+            amount_usd: t.amount,
+            settlement_type: 'PAYMENT' as SettlementType,
+            status: 'CONFIRMED' as const,
+            notes: 'Saldado total del grupo',
+          }));
+
+          const { data, error } = await supabase
+            .from('settlements')
+            .insert(newSettlements)
+            .select();
+
+          if (error) throw error;
+          if (data) {
+            setSettlementRecords([...data, ...settlementRecords]);
+          }
+        } catch (err: any) {
+          setFormError('Error al saldar todas las deudas: ' + (err.message || err));
+        }
+      }
+    );
+  }
+
+  // Deshacer una liquidación o condonación previa
+  async function handleUndoSettlement(st: Settlement) {
+    const fromP = participants.find(p => p.id === st.from_id)?.name || 'Deudor';
+    const toP = participants.find(p => p.id === st.to_id)?.name || 'Acreedor';
+
+    showConfirm(
+      'Deshacer Liquidación',
+      `¿Deseas anular este registro de ${formatUSD(st.amount_usd || st.amount)}? Al anularlo, se reabrira la deuda pendiente entre ${fromP} y ${toP}.`,
+      async () => {
+        try {
+          const { error } = await supabase.from('settlements').delete().eq('id', st.id);
+          if (error) throw error;
+          setSettlementRecords(settlementRecords.filter(s => s.id !== st.id));
+        } catch (err: any) {
+          setFormError('Error al deshacer liquidacion: ' + (err.message || err));
+        }
+      }
+    );
+  }
+
+  // Reiniciar sala desde cero (Peligro)
+  async function handleResetRoomToZero() {
+    if (!group?.id) return;
+    showConfirm(
+      'Reiniciar Sala a Cero',
+      '¡Atención! Esta acción eliminara de forma definitiva TODOS los gastos y liquidaciones de esta sala. Todos los balances quedaran limpios en $0.00.',
+      async () => {
+        try {
+          await supabase.from('settlements').delete().eq('group_id', group.id);
+          const expIds = expenses.map(e => e.id);
+          if (expIds.length > 0) {
+            await supabase.from('expense_splits').delete().in('expense_id', expIds);
+            await supabase.from('expenses').delete().eq('group_id', group.id);
+          }
+          setExpenses([]);
+          setSplits([]);
+          setSettlementRecords([]);
+        } catch (err: any) {
+          setFormError('Error al reiniciar sala: ' + (err.message || err));
+        }
+      }
+    );
+  }
+
+  // --- PARTICIPANTES ---
+  async function handleAddParticipant(e: React.FormEvent) {
+    e.preventDefault();
+    setAddPartError(null);
+    if (!newPartName.trim()) {
+      setAddPartError('Ingresa un nombre.');
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('participants')
+        .insert([{ group_id: group?.id, name: newPartName.trim() }])
+        .select();
+
+      if (error) throw error;
+      setParticipants([...participants, data[0]]);
+      setNewPartName('');
+    } catch (err: any) {
+      setAddPartError(err.message || 'Error al agregar participante.');
+    }
+  }
+
+  // Cálculos reactivos
   const balances = calculateBalances(participants, expenses, splits, settlementRecords);
   const settlements = calculateSettlement(balances);
-  const balanceSum = balances.reduce((sum, b) => sum + b.balance, 0);
-  const isBalanceZero = Math.abs(balanceSum) < 0.01;
 
-  // Total consolidado en USD
+  // Total gastado en USD
   const totalUSD = expenses.reduce((sum, e) => {
     const usd = e.amount_usd > 0 ? e.amount_usd : toUSD(e.amount, e.currency || 'BOB', rates);
     return sum + usd;
   }, 0);
 
+  // Balance del usuario actual
+  const myParticipant = participants.find(p => p.user_id === user?.id);
+  const myBalance = myParticipant ? balances.find(b => b.participantId === myParticipant.id) : null;
+
+  // Notificaciones de pagos pendientes de confirmación para este usuario
+  const pendingForMe = settlementRecords.filter(
+    s => s.status === 'PENDING' && myParticipant && s.to_id === myParticipant.id
+  );
+
   const isOwner = group?.owner_id === user?.id;
-  const allSelected = participants.length > 0 && selectedParticipants.length === participants.length;
-
-  // Equivalente USD del monto ingresado en el formulario (preview)
-  const previewUSD = amount && parseFloat(amount) > 0
-    ? toUSD(parseFloat(amount), currency, rates)
-    : 0;
-
-  function handleCopyCode() {
-    if (!group?.join_code) return;
-    navigator.clipboard.writeText(group.join_code);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  }
-
-  function getInitials(name: string): string {
-    if (!name) return '??';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-
-  function shareToWhatsApp() {
-    let text = `*Resumen - ${group?.name}*\nGasto total: ${formatUSD(totalUSD)}\n\n`;
-    if (settlements.length === 0) {
-      text += 'Todos a mano. No hay deudas.';
-    } else {
-      text += '*Transferencias (en USD):*\n';
-      settlements.forEach(t => { text += `${t.from} -> ${formatUSD(t.amount)} -> ${t.to}\n`; });
-    }
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  }
+  const allSelected =
+    participants.length > 0 && selectedParticipants.length === participants.length;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
-        <Navbar backLabel="Mis salas" backTo="/cuentas" onSignOut={signOut} />
-        <div className="p-8 text-center text-[var(--text-muted)] text-sm">Cargando detalles de la sala...</div>
+      <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col items-center justify-center text-[var(--text-secondary)]">
+        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-medium animate-pulse">Cargando sala y calculando balances...</p>
       </div>
     );
   }
 
-  const tabs = [
-    { key: 'participants' as const, label: 'Participantes', icon: <Users size={15} /> },
-    { key: 'expenses' as const, label: 'Gastos', icon: <Receipt size={15} /> },
-    { key: 'balances' as const, label: 'Liquidacion', icon: <Calculator size={15} /> },
-  ];
-
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
-      <Navbar backLabel="Mis salas" backTo="/cuentas" userName={user?.user_metadata?.name || user?.email} onSignOut={signOut} />
-      <ConfirmModal isOpen={modal.isOpen} title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onCancel={closeConfirm} />
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors pb-20">
+      <Navbar
+        backLabel="Mis salas"
+        backTo="/cuentas"
+        userName={user?.user_metadata?.name || user?.email}
+        onSignOut={signOut}
+      />
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 pb-14 animate-in fade-in duration-200">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 animate-fade-in">
+        <FormError message={formError} />
 
-        {/* Aviso de tasas de respaldo */}
-        {ratesFromFallback && (
-          <div className="mb-4 flex items-center gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs px-3.5 py-2.5 rounded-xl">
-            <AlertCircle size={14} className="shrink-0" />
-            <span>Tasas de cambio estimadas (sin conexion a la API). Los montos en USD son aproximados.</span>
-            <button
-              onClick={loadRates}
-              disabled={ratesLoading}
-              className="ml-auto flex items-center gap-1 font-medium underline hover:no-underline shrink-0"
-            >
-              <RefreshCw size={12} className={ratesLoading ? 'animate-spin' : ''} />
-              Reintentar
-            </button>
-          </div>
-        )}
-
-        {/* Header con estilo fintech moderno */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-[var(--bg-card)] p-4 sm:p-5 rounded-2xl border border-[var(--border)] shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="bg-gradient-to-tr from-indigo-600 to-indigo-400 p-3 rounded-2xl text-white shadow-xs shrink-0">
-              <FolderOpen size={22} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">{group?.name}</h1>
-                {isOwner && (
-                  <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold">
-                    ADMIN
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-2">
-                <span>{participants.length} {participants.length === 1 ? 'participante' : 'participantes'}</span>
-                <span>•</span>
-                <span>{expenses.length} {expenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={handleCopyCode}
-              title="Copiar codigo de sala"
-              className="flex items-center gap-2 bg-[var(--bg-secondary)] hover:bg-[var(--border)]/60 border border-[var(--border)] rounded-xl px-3 py-2 transition-all cursor-pointer group"
-            >
-              <div className="flex flex-col text-left">
-                <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Codigo</span>
-                <span className="font-mono font-bold text-sm text-indigo-500 tracking-wider">{group?.join_code}</span>
-              </div>
-              {copiedCode ? <CheckCheck size={16} className="text-emerald-500 ml-1 shrink-0" /> : <Copy size={15} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors ml-1 shrink-0" />}
-            </button>
-
-            <div className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Total Gastado</span>
-              <span className="font-bold text-sm text-[var(--text-primary)]">{formatUSD(totalUSD)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs Segmentados */}
-        <div className="flex gap-1.5 mb-6 bg-[var(--bg-card)] p-1.5 rounded-2xl border border-[var(--border)] transition-colors shadow-2xs overflow-x-auto">
-          {tabs.map(tab => {
-            const isActive = activeTab === tab.key;
-            let badgeCount: number | null = null;
-            if (tab.key === 'participants') badgeCount = participants.length;
-            if (tab.key === 'expenses') badgeCount = expenses.length;
-            const pendingPayments = settlementRecords.filter(s => s.status === 'PENDING').length;
-
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 flex justify-center items-center gap-2 py-2.5 px-3.5 rounded-xl transition-all text-xs sm:text-sm font-semibold whitespace-nowrap ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
-                }`}
+        {/* HEADER DE LA SALA */}
+        <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 mb-6 shadow-xs relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div
+                className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(
+                  group?.name || 'Sala'
+                )} flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0`}
               >
-                {tab.icon}
-                <span>{tab.label}</span>
-                {badgeCount !== null && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'}`}>
-                    {badgeCount}
-                  </span>
-                )}
-                {tab.key === 'balances' && pendingPayments > 0 && (
-                  <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                    {pendingPayments}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* PARTICIPANTES */}
-        {activeTab === 'participants' && (
-          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs space-y-4">
-            {!isOwner && (
-              <div className="p-4 border border-[var(--border)] rounded-xl flex justify-between items-center bg-[var(--bg-secondary)]">
-                <div>
-                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">Salir de la sala</h2>
-                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">Abandonar este grupo y eliminarte de la lista (si no tienes deudas pendientes).</p>
-                </div>
-                <button onClick={handleLeaveGroup} className="bg-red-500 hover:bg-red-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0">
-                  Salir
-                </button>
+                {getInitials(group?.name || 'Sala')}
               </div>
-            )}
-
-            <FormError message={formError} />
-
-            <div className="flex justify-between items-center">
-              <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Miembros del grupo ({participants.length})</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+                    {group?.name}
+                  </h1>
+                  {isOwner && (
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                      Admin
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Creada el {new Date(group?.created_at || '').toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
             </div>
 
-            {participants.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)] text-center py-6">Sin participantes</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {participants.map(p => {
-                  const isMe = p.user_id === user?.id;
-                  const pBalance = balances.find(b => b.participantId === p.id);
-                  const balanceVal = pBalance ? pBalance.balance : 0;
+            {/* ACCIONES DEL HEADER: CODIGO Y COMPARTIR */}
+            <div className="flex items-center flex-wrap gap-2">
+              <button
+                onClick={handleCopyCode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs font-semibold text-[var(--text-primary)] hover:border-indigo-500/40 transition-all btn-press"
+                title="Copiar codigo de sala"
+              >
+                <span className="text-[var(--text-muted)] font-mono">Codigo:</span>
+                <span className="font-mono tracking-wider text-indigo-500">{joinCode}</span>
+                {copiedCode ? <CheckCheck size={14} className="text-emerald-500" /> : <Copy size={13} className="text-[var(--text-muted)]" />}
+                {copiedCode && <span className="text-[11px] text-emerald-500 font-medium">¡Copiado!</span>}
+              </button>
 
-                  return (
-                    <div
-                      key={p.id}
-                      className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
-                        isMe
-                          ? 'border-indigo-500/50 bg-indigo-500/5 shadow-xs'
-                          : 'border-[var(--border)] bg-[var(--bg-secondary)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isMe ? 'bg-indigo-600 text-white' : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border)]'
-                        }`}>
-                          {getInitials(p.name)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                            {p.name}
-                          </p>
-                          {isMe && <span className="text-[10px] text-indigo-500 font-medium">Tú</span>}
-                        </div>
-                      </div>
+              <button
+                onClick={handleShareWhatsApp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors btn-press"
+                title="Invitar por WhatsApp"
+              >
+                <Share2 size={13} />
+                <span className="hidden sm:inline">Invitar</span>
+              </button>
 
-                      <div className="shrink-0">
-                        {Math.abs(balanceVal) > 0.01 ? (
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                            balanceVal > 0.001
-                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-                          }`}>
-                            {balanceVal > 0.001 ? `+${formatUSD(balanceVal)}` : `-${formatUSD(Math.abs(balanceVal))}`}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-medium text-[var(--text-muted)] bg-[var(--bg-card)] border border-[var(--border)] px-2.5 py-1 rounded-full">
-                            Al día
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              <button
+                onClick={handleLeaveGroup}
+                className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors btn-press ml-auto sm:ml-0"
+              >
+                Salir
+              </button>
+            </div>
           </div>
+        </section>
+
+        {/* TOP STATS CARDS */}
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-6">
+          {/* Card 1: Total Gastado */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5">
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)] font-medium mb-1">
+              <span>Total Gastado (USD)</span>
+              <Coins size={16} className="text-indigo-500" />
+            </div>
+            <div className="text-2xl font-black text-[var(--text-primary)] tracking-tight">
+              {formatUSD(totalUSD)}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">
+              {expenses.length} {expenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}
+            </p>
+          </div>
+
+          {/* Card 2: Tu Posición Neta */}
+          <div
+            className={`border rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5 ${
+              !myBalance || Math.abs(myBalance.balance) < 0.01
+                ? 'bg-[var(--bg-card)] border-[var(--border)]'
+                : myBalance.balance > 0
+                ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-rose-500/5 dark:bg-rose-500/10 border-rose-500/30'
+            }`}
+          >
+            <div className="flex items-center justify-between text-xs font-medium mb-1">
+              <span className="text-[var(--text-muted)]">Tu Balance Neto</span>
+              {!myBalance || Math.abs(myBalance.balance) < 0.01 ? (
+                <Check size={16} className="text-[var(--text-muted)]" />
+              ) : myBalance.balance > 0 ? (
+                <ArrowUpRight size={16} className="text-emerald-500" />
+              ) : (
+                <ArrowDownRight size={16} className="text-rose-500" />
+              )}
+            </div>
+            <div
+              className={`text-2xl font-black tracking-tight ${
+                !myBalance || Math.abs(myBalance.balance) < 0.01
+                  ? 'text-[var(--text-primary)]'
+                  : myBalance.balance > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {!myBalance || Math.abs(myBalance.balance) < 0.01
+                ? '$ 0.00'
+                : myBalance.balance > 0
+                ? `+ ${formatUSD(myBalance.balance)}`
+                : `- ${formatUSD(Math.abs(myBalance.balance))}`}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1 font-medium">
+              {!myBalance || Math.abs(myBalance.balance) < 0.01
+                ? 'Estás al día (sin deudas)'
+                : myBalance.balance > 0
+                ? 'Te deben en total'
+                : 'Debes pagar en total'}
+            </p>
+          </div>
+
+          {/* Card 3: Participantes */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5">
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)] font-medium mb-1">
+              <span>Participantes</span>
+              <Users size={16} className="text-amber-500" />
+            </div>
+            <div className="text-2xl font-black text-[var(--text-primary)] tracking-tight">
+              {participants.length}
+            </div>
+            <div className="flex items-center gap-1 mt-1.5 overflow-hidden">
+              {participants.slice(0, 5).map(p => (
+                <div
+                  key={p.id}
+                  className={`w-5 h-5 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                    p.name
+                  )} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}
+                  title={p.name}
+                >
+                  {getInitials(p.name)}
+                </div>
+              ))}
+              {participants.length > 5 && (
+                <span className="text-[10px] text-[var(--text-muted)] font-bold">
+                  +{participants.length - 5}
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ALERTA: PAGOS REPORTADOS PENDIENTES DE CONFIRMACION */}
+        {pendingForMe.length > 0 && (
+          <section className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 animate-pulse-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0">
+                <AlertCircle size={18} />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-amber-700 dark:text-amber-300">
+                  {pendingForMe.length === 1
+                    ? 'Tienes 1 pago reportado pendiente de confirmar'
+                    : `Tienes ${pendingForMe.length} pagos reportados pendientes de confirmar`}
+                </h4>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Verifica tu cuenta y confirma para eliminar la deuda.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('settlement')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs transition-colors self-end sm:self-auto shrink-0 shadow-xs"
+            >
+              Revisar en Liquidación
+            </button>
+          </section>
         )}
 
-        {/* GASTOS */}
+        {/* NAVEGACION POR PESTAÑAS (SEGMENTED TABS) */}
+        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)] mb-6 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('expenses')}
+            className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'expenses'
+                ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs border border-[var(--border)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Receipt size={16} />
+            <span>Gastos</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-muted)] font-black">
+              {expenses.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settlement')}
+            className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all relative ${
+              activeTab === 'settlement'
+                ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs border border-[var(--border)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <DollarSign size={16} />
+            <span>Liquidación</span>
+            {settlements.length > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-black">
+                {settlements.length}
+              </span>
+            )}
+            {pendingForMe.length > 0 && (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping absolute top-2 right-3" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('participants')}
+            className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+              activeTab === 'participants'
+                ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs border border-[var(--border)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Users size={16} />
+            <span>Participantes</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-muted)] font-black">
+              {participants.length}
+            </span>
+          </button>
+        </div>
+
+        {/* ========================================================= */}
+        {/* PESTAÑA 1: GASTOS                                        */}
+        {/* ========================================================= */}
         {activeTab === 'expenses' && (
-          <div className="grid lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 h-fit transition-colors">
-              <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">{editingExpenseId ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
-              <form onSubmit={saveExpense} className="space-y-3">
-                <FormError message={formError} />
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Titulo</label>
-                  <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Cena, Taxi, Hotel" className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:text-[var(--text-muted)]" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Descripcion / Notas (opcional)</label>
-                  <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej. Pagado en efectivo, incluyo propina" className="w-full px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:text-[var(--text-muted)]" />
+          <div className="space-y-6 animate-slide-up">
+            {/* Header de la sección de gastos con botón nuevo gasto */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+                  Historial de Gastos
+                </h2>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Registra y gestiona los gastos compartidos
+                </p>
+              </div>
+
+              {!isExpenseFormOpen && (
+                <button
+                  onClick={handleStartAddExpense}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all btn-press"
+                >
+                  <Plus size={16} />
+                  <span>Nuevo Gasto</span>
+                </button>
+              )}
+            </div>
+
+            {/* FORMULARIO DE GASTO (ACORDEON / EXPANDIBLE) */}
+            {isExpenseFormOpen && (
+              <form
+                onSubmit={handleSaveExpense}
+                className="bg-[var(--bg-card)] border border-indigo-500/30 rounded-2xl p-5 sm:p-6 shadow-md space-y-5 animate-scale-in"
+              >
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <Receipt size={18} className="text-indigo-500" />
+                    <span>{editingExpenseId ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={resetExpenseForm}
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
 
-                {/* Monto + Moneda en la misma fila */}
+                {/* BLOQUE 1: MONTO Y MONEDA */}
                 <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Monto y moneda</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={amount}
-                      onChange={e => setAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors placeholder:text-[var(--text-muted)]"
-                    />
-                    <select
-                      value={currency}
-                      onChange={e => setCurrency(e.target.value)}
-                      className="px-2 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors font-medium"
-                    >
-                      {SUPPORTED_CURRENCIES.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Cuánto se pagó?
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2 relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={amount}
+                        onChange={e => setAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-4 py-3 text-lg font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={currency}
+                        onChange={e => setCurrency(e.target.value)}
+                        className="w-full px-3 py-3 text-sm font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      >
+                        {SUPPORTED_CURRENCIES.map(c => (
+                          <option key={c} value={c}>
+                            {c} ({CURRENCY_SYMBOLS[c]})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  {/* Preview de conversion a USD */}
-                  {previewUSD > 0 && currency !== 'USD' && (
-                    <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                      ≈ {formatUSD(previewUSD)} USD
-                    </p>
-                  )}
-                  {currency !== 'USD' && !amount && (
-                    <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                      Tasa: 1 USD = {rates[currency]?.toFixed(4) ?? '—'} {currency}
+                  {amount && parseFloat(amount) > 0 && currency !== 'USD' && (
+                    <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
+                      Equivalente: ≈ <strong className="text-[var(--text-primary)]">{formatUSD(toUSD(parseFloat(amount), currency, rates))}</strong> (Tasa: {rates[currency]?.toFixed(2)} {currency}/USD)
                     </p>
                   )}
                 </div>
 
+                {/* BLOQUE 2: CONCEPTO Y NOTAS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                      Descripción / Concepto
+                    </label>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="Ej. Cena en restaurante, Uber, Supermercado..."
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                      Notas adicionales (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Detalles, número de factura..."
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* BLOQUE 3: QUIÉN PAGÓ */}
                 <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Quien pago</label>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Quién pagó la cuenta?
+                  </label>
                   <select
                     value={payerId}
-                    onChange={e => {
-                      const newPayer = e.target.value;
-                      setPayerId(newPayer);
-                      if (splitMode === 'PERSONAL' && newPayer) {
-                        setSelectedParticipants([newPayer]);
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+                    onChange={e => setPayerId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    required
                   >
-                    <option value="">Selecciona...</option>
-                    {participants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="">Selecciona al pagador...</option>
+                    {participants.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.user_id === user?.id ? '(Tú)' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                {/* Selector de Modo de División */}
+                {/* BLOQUE 4: MODO DE DIVISION */}
                 <div>
-                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Modo de division</label>
-                  <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] text-xs font-medium">
-                    <button
-                      type="button"
-                      onClick={() => setSplitMode('EQUAL')}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'EQUAL' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Partes iguales
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSplitMode('PERCENTAGE')}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'PERCENTAGE' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Porcentaje (%)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSplitMode('CUSTOM')}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'CUSTOM' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Monto manual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSplitMode('PERSONAL');
-                        if (payerId) setSelectedParticipants([payerId]);
-                      }}
-                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'PERSONAL' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                    >
-                      Por su cuenta
-                    </button>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Cómo se divide?
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { mode: 'EQUAL', label: 'Partes Iguales', desc: 'Centavo perdido exacto' },
+                      { mode: 'PERCENTAGE', label: 'Porcentajes %', desc: 'Suma debe ser 100%' },
+                      { mode: 'CUSTOM', label: 'Monto Fijo', desc: 'Monto exacto por persona' },
+                      { mode: 'PERSONAL', label: 'Gasto Personal', desc: 'Por su cuenta (sin deuda)' },
+                    ].map(item => (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        onClick={() => setSplitMode(item.mode as SplitMode)}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          splitMode === item.mode
+                            ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                            : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
+                        }`}
+                      >
+                        <div className="font-bold text-xs">{item.label}</div>
+                        <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{item.desc}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {splitMode === 'PERSONAL' ? (
-                  <div className="p-3 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-lg text-xs">
-                    <p className="font-semibold text-indigo-700 dark:text-indigo-300 mb-0.5">Gasto personal (por su cuenta)</p>
-                    <p className="text-[var(--text-secondary)]">
-                      {payerId
-                        ? `Asignado al 100% a ${participants.find(p => p.id === payerId)?.name || 'quien pago'}. Suma al total del viaje, pero no genera deudas con el grupo.`
-                        : 'Selecciona arriba quien pago para asociar este gasto personal.'}
-                    </p>
-                  </div>
-                ) : (
+                {/* BLOQUE 5: SELECCION DE PARTICIPANTES O VALORES */}
+                {splitMode !== 'PERSONAL' && (
                   <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs font-medium text-[var(--text-secondary)]">
-                        {splitMode === 'PERCENTAGE' ? 'Asignar porcentajes' : splitMode === 'CUSTOM' ? `Asignar montos (${currency})` : 'Dividir entre'}
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-[var(--text-secondary)]">
+                        Participantes incluidos ({selectedParticipants.length}/{participants.length})
                       </label>
-                      <div className="flex items-center gap-2">
-                        {splitMode === 'PERCENTAGE' && selectedParticipants.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const equalPct = (100 / selectedParticipants.length).toFixed(1);
-                              const newShares: Record<string, string> = { ...customShares };
-                              selectedParticipants.forEach(pId => { newShares[pId] = equalPct; });
-                              setCustomShares(newShares);
-                            }}
-                            className="text-xs text-indigo-500 hover:underline font-medium"
-                          >
-                            Repartir parejo
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (allSelected) {
-                              setSelectedParticipants([]);
-                            } else {
-                              setSelectedParticipants(participants.map(p => p.id));
-                            }
-                          }}
-                          className="text-xs text-indigo-500 hover:underline font-medium"
-                        >
-                          {allSelected ? 'Deseleccionar todos' : 'Todos'}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (allSelected) setSelectedParticipants([]);
+                          else setSelectedParticipants(participants.map(p => p.id));
+                        }}
+                        className="text-xs text-indigo-500 hover:underline font-semibold"
+                      >
+                        {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                      </button>
                     </div>
 
-                    <div className="space-y-1 max-h-48 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)]">
-                      {participants.length === 0 && <p className="text-xs text-[var(--text-muted)] text-center py-2">Agrega participantes primero</p>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {participants.map(p => {
                         const isSelected = selectedParticipants.includes(p.id);
                         return (
-                          <div key={p.id} className="flex items-center justify-between gap-2 p-1.5 hover:bg-[var(--bg-card)] rounded-md transition-colors">
-                            <label className="flex items-center gap-2 text-sm cursor-pointer flex-1 min-w-0">
+                          <div
+                            key={p.id}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                              isSelected
+                                ? 'bg-[var(--bg-secondary)] border-indigo-500/40'
+                                : 'bg-[var(--bg-primary)] border-[var(--border)] opacity-60'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -849,150 +1139,321 @@ export default function CuentaDetailPage() {
                                   if (e.target.checked) {
                                     setSelectedParticipants([...selectedParticipants, p.id]);
                                   } else {
-                                    setSelectedParticipants(selectedParticipants.filter(s => s !== p.id));
+                                    setSelectedParticipants(selectedParticipants.filter(id => id !== p.id));
                                   }
                                 }}
-                                className="rounded text-indigo-500 focus:ring-indigo-500 w-3.5 h-3.5"
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                               />
-                              <span className="text-[var(--text-primary)] truncate text-xs sm:text-sm">{p.name}</span>
+                              <div
+                                className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                                  p.name
+                                )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                              >
+                                {getInitials(p.name)}
+                              </div>
+                              <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                                {p.name} {p.id === payerId ? '(Pagador)' : ''}
+                              </span>
                             </label>
 
-                            {/* Input inline para PERCENTAGE */}
-                            {splitMode === 'PERCENTAGE' && isSelected && (
-                              <div className="flex items-center gap-1 shrink-0">
+                            {/* Inputs adicionales si es % o Custom */}
+                            {isSelected && splitMode === 'PERCENTAGE' && (
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
                                 <input
                                   type="number"
-                                  step="any"
-                                  min="0"
-                                  max="100"
-                                  placeholder="0"
+                                  step="0.1"
                                   value={customShares[p.id] || ''}
-                                  onChange={e => setCustomShares({ ...customShares, [p.id]: e.target.value })}
-                                  className="w-16 px-1.5 py-1 text-xs border border-[var(--border)] rounded bg-[var(--bg-primary)] text-[var(--text-primary)] text-right outline-none focus:ring-1 focus:ring-indigo-500"
+                                  onChange={e =>
+                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
+                                  }
+                                  placeholder="%"
+                                  className="w-16 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
                                 />
                                 <span className="text-xs text-[var(--text-muted)]">%</span>
                               </div>
                             )}
 
-                            {/* Input inline para CUSTOM */}
-                            {splitMode === 'CUSTOM' && isSelected && (
-                              <div className="flex items-center gap-1 shrink-0">
+                            {isSelected && splitMode === 'CUSTOM' && (
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
                                 <input
                                   type="number"
-                                  step="any"
-                                  min="0"
-                                  placeholder="0.00"
+                                  step="0.01"
                                   value={customShares[p.id] || ''}
-                                  onChange={e => setCustomShares({ ...customShares, [p.id]: e.target.value })}
-                                  className="w-20 px-1.5 py-1 text-xs border border-[var(--border)] rounded bg-[var(--bg-primary)] text-[var(--text-primary)] text-right outline-none focus:ring-1 focus:ring-indigo-500"
+                                  onChange={e =>
+                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
+                                  }
+                                  placeholder="0.00"
+                                  className="w-20 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
                                 />
-                                <span className="text-[10px] text-[var(--text-muted)]">{currency}</span>
+                                <span className="text-[11px] text-[var(--text-muted)] font-mono">{currency}</span>
                               </div>
                             )}
                           </div>
                         );
                       })}
                     </div>
-
-                    {/* Resumen de validación para porcentaje */}
-                    {splitMode === 'PERCENTAGE' && selectedParticipants.length > 0 && (
-                      <div className="flex justify-between items-center text-xs mt-1 px-1">
-                        <span className="text-[var(--text-muted)]">Total asignado:</span>
-                        {(() => {
-                          const sumPct = selectedParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
-                          const isOk = Math.abs(sumPct - 100) <= 0.1;
-                          return (
-                            <span className={`font-semibold ${isOk ? 'text-emerald-500' : 'text-amber-500'}`}>
-                              {sumPct.toFixed(1)}% / 100%
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* Resumen de validación para custom amount */}
-                    {splitMode === 'CUSTOM' && selectedParticipants.length > 0 && (
-                      <div className="flex justify-between items-center text-xs mt-1 px-1">
-                        <span className="text-[var(--text-muted)]">Total asignado:</span>
-                        {(() => {
-                          const sumCustom = selectedParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
-                          const target = parseFloat(amount) || 0;
-                          const isOk = target > 0 && Math.abs(sumCustom - target) <= 0.05;
-                          return (
-                            <span className={`font-semibold ${isOk ? 'text-emerald-500' : 'text-amber-500'}`}>
-                              {sumCustom.toFixed(2)} / {target.toFixed(2)} {currency}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
                   </div>
                 )}
-                <div className="flex gap-2 pt-1">
-                  <button type="submit" disabled={participants.length === 0} className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-2.5 text-sm rounded-lg transition-colors disabled:opacity-40">
-                    {editingExpenseId ? 'Guardar' : 'Agregar'}
+
+                {/* BOTONES DE ACCION */}
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={resetExpenseForm}
+                    className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)] transition-colors"
+                  >
+                    Cancelar
                   </button>
-                  {editingExpenseId && <button type="button" onClick={cancelEdit} className="flex-1 bg-[var(--bg-secondary)] text-[var(--text-secondary)] font-medium px-4 py-2.5 text-sm rounded-lg transition-colors">Cancelar</button>}
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all btn-press"
+                  >
+                    {editingExpenseId ? 'Guardar Cambios' : 'Añadir Gasto'}
+                  </button>
                 </div>
               </form>
-            </div>
+            )}
 
-            <div className="lg:col-span-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
-              <h2 className="text-base font-semibold text-[var(--text-primary)] mb-3">Historial</h2>
-              {expenses.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-lg">
-                  <Receipt className="mx-auto text-[var(--text-muted)] mb-2" size={28} />
-                  <p className="text-sm text-[var(--text-muted)]">Sin gastos</p>
+            {/* LISTA DE GASTOS */}
+            {expenses.length === 0 ? (
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-10 text-center shadow-xs">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto mb-3">
+                  <Receipt size={28} />
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {expenses.map(exp => {
-                    const payer = participants.find(p => p.id === exp.payer_id)?.name || '?';
-                    const expSplits = splits.filter(s => s.expense_id === exp.id);
-                    const expCurrency = exp.currency || 'BOB';
-                    const expUsd = exp.amount_usd > 0 ? exp.amount_usd : toUSD(exp.amount, expCurrency, rates);
-                    const showUsdConversion = expCurrency !== 'USD';
-                    const isPersonal = exp.split_mode === 'PERSONAL';
-                    const isPct = exp.split_mode === 'PERCENTAGE';
-                    const isCustom = exp.split_mode === 'CUSTOM';
-                    return (
-                      <div key={exp.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 rounded-lg border border-[var(--border)] hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-colors gap-2">
+                <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
+                  No hay gastos registrados todavía
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] max-w-sm mx-auto mb-5">
+                  Registra el primer gasto de este viaje o evento para que el sistema comience a calcular balances.
+                </p>
+                <button
+                  onClick={handleStartAddExpense}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all btn-press inline-flex items-center gap-1.5"
+                >
+                  <Plus size={15} />
+                  <span>Añadir Primer Gasto</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {expenses.map(expense => {
+                  const payer = participants.find(p => p.id === expense.payer_id);
+                  const isPersonal = expense.split_mode === 'PERSONAL';
+                  return (
+                    <div
+                      key={expense.id}
+                      className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] transition-all flex items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-indigo-500 shrink-0">
+                          <Receipt size={18} />
+                        </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-medium text-[var(--text-primary)] text-sm truncate">{exp.description}</p>
-                            {isPersonal && (
-                              <span className="text-[10px] bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded font-semibold">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                              {expense.description}
+                            </h4>
+                            {isPersonal ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0">
                                 Personal
                               </span>
-                            )}
-                            {isPct && (
-                              <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-semibold">
+                            ) : expense.split_mode === 'PERCENTAGE' ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
                                 % Porcentaje
                               </span>
-                            )}
-                            {isCustom && (
-                              <span className="text-[10px] bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 px-1.5 py-0.5 rounded font-semibold">
-                                Manual
+                            ) : expense.split_mode === 'CUSTOM' ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
+                                Monto Fijo
                               </span>
-                            )}
+                            ) : null}
                           </div>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
-                            {payer} {isPersonal ? 'pago por su cuenta' : 'pago'}{' '}
-                            <span className="font-semibold text-[var(--text-primary)]">{formatOriginal(exp.amount, expCurrency)}</span>
-                            {showUsdConversion && (
-                              <span className="text-[var(--text-muted)]"> ({formatUSD(expUsd)})</span>
-                            )}
-                            {!isPersonal && ` — ${expSplits.length} pers.`}
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                            Pagado por <strong className="text-[var(--text-secondary)]">{payer?.name || 'Alguien'}</strong>
+                            {expense.created_at ? ` • ${new Date(expense.created_at).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}` : ''}
+                            {expense.notes && <span className="italic ml-1">({expense.notes})</span>}
                           </p>
-                          {exp.notes && (
-                            <p className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate italic">
-                              {exp.notes}
-                            </p>
+                        </div>
+                      </div>
+
+                      {/* Montos y acciones */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <div className="text-sm sm:text-base font-extrabold text-[var(--text-primary)]">
+                            {formatOriginal(expense.amount, expense.currency || 'BOB')}
+                          </div>
+                          {expense.currency !== 'USD' && (
+                            <div className="text-[11px] text-[var(--text-muted)] font-medium">
+                              ≈ {formatUSD(expense.amount_usd > 0 ? expense.amount_usd : toUSD(expense.amount, expense.currency || 'BOB', rates))}
+                            </div>
                           )}
                         </div>
-                        <div className="flex gap-1 self-end sm:self-center shrink-0">
-                          <button onClick={() => startEditExpense(exp)} className="text-indigo-400 hover:text-indigo-600 p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors" title="Editar"><Edit2 size={14} /></button>
-                          <button onClick={() => handleDeleteExpense(exp.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Eliminar"><Trash2 size={14} /></button>
+
+                        <div className="flex items-center gap-1 border-l border-[var(--border)] pl-2">
+                          <button
+                            onClick={() => handleEditExpense(expense)}
+                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                            title="Editar gasto"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteExpense(expense.id)}
+                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                            title="Eliminar gasto"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* PESTAÑA 2: LIQUIDACIÓN (MUERTE A LA DEUDA)               */}
+        {/* ========================================================= */}
+        {activeTab === 'settlement' && (
+          <div className="space-y-6 animate-slide-up">
+            {/* SECCIÓN 1: TRANSFERENCIAS PENDIENTES */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4 mb-5">
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <HeartHandshake size={20} className="text-indigo-500" />
+                    <span>Transferencias para saldar cuentas</span>
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Calculadas en Dólares (USD) con el número mínimo de transferencias
+                  </p>
+                </div>
+
+                {settlements.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSettleAllDebts}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all btn-press"
+                      title="Marcar todas las deudas pendientes como saldadas"
+                    >
+                      Saldar todas las deudas
+                    </button>
+                    <button
+                      onClick={handleShareWhatsApp}
+                      className="px-3 py-1.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors btn-press flex items-center gap-1.5"
+                    >
+                      <Share2 size={13} />
+                      <span className="hidden sm:inline">Compartir</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {settlements.length === 0 ? (
+                <div className="py-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-3">
+                    <ShieldCheck size={32} />
+                  </div>
+                  <h4 className="text-base font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                    ¡Todos están al día!
+                  </h4>
+                  <p className="text-xs text-[var(--text-secondary)] max-w-sm mx-auto">
+                    No existen deudas pendientes en esta sala. Todos los participantes tienen balance en cero ($0.00).
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {settlements.map((t, idx) => {
+                    const fromPart = participants.find(p => p.id === t.from_id);
+                    const toPart = participants.find(p => p.id === t.to_id);
+                    const isCreditor = user && toPart?.user_id === user.id;
+                    const isDebtor = user && fromPart?.user_id === user.id;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-4 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-[var(--text-muted)]"
+                      >
+                        {/* Flujo Deudor -> Monto -> Acreedor */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Deudor */}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-8 h-8 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                                t.from
+                              )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                            >
+                              {getInitials(t.from)}
+                            </div>
+                            <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] truncate max-w-[120px]">
+                              {t.from}
+                            </span>
+                          </div>
+
+                          {/* Píldora de Monto */}
+                          <div className="flex flex-col items-center shrink-0 px-2">
+                            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">
+                              Debe
+                            </span>
+                            <div className="flex items-center gap-1 font-extrabold text-sm text-[var(--text-primary)] bg-[var(--bg-card)] px-3 py-1 rounded-full border border-[var(--border)] shadow-xs">
+                              <span>{formatUSD(t.amount)}</span>
+                              <ArrowRight size={13} className="text-indigo-500" />
+                            </div>
+                          </div>
+
+                          {/* Acreedor */}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-8 h-8 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                                t.to
+                              )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                            >
+                              {getInitials(t.to)}
+                            </div>
+                            <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] truncate max-w-[120px]">
+                              {t.to}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Botones de acción según rol */}
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                          {isCreditor ? (
+                            <>
+                              <button
+                                onClick={() => openSettleModal(t.from_id, t.to_id, t.amount, 'PAYMENT')}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs btn-press"
+                              >
+                                Registrar Cobro
+                              </button>
+                              <button
+                                onClick={() => openSettleModal(t.from_id, t.to_id, t.amount, 'FORGIVEN')}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 text-xs font-bold transition-all btn-press"
+                              >
+                                Perdonar
+                              </button>
+                            </>
+                          ) : isDebtor ? (
+                            <button
+                              onClick={() => openSettleModal(t.from_id, t.to_id, t.amount, 'PAYMENT')}
+                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs btn-press"
+                            >
+                              Reportar Pago
+                            </button>
+                          ) : isOwner ? (
+                            <button
+                              onClick={() => openSettleModal(t.from_id, t.to_id, t.amount, 'PAYMENT')}
+                              className="px-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
+                            >
+                              Gestionar Pago
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-[var(--text-muted)] italic">
+                              Pendiente
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -1000,352 +1461,318 @@ export default function CuentaDetailPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* LIQUIDACION */}
-        {activeTab === 'balances' && (
-          <div className="space-y-5">
-            {/* AVISO DE REGISTROS DE LIQUIDACIÓN HUÉRFANOS SI NO HAY GASTOS */}
-            {expenses.length === 0 && settlementRecords.length > 0 && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-700 dark:text-amber-300 shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <AlertCircle size={18} className="shrink-0 text-amber-500" />
-                  <div>
-                    <p className="font-semibold text-sm">Registros de liquidación sin gastos activos</p>
-                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">Se detectaron pagos o perdones de gastos que fueron eliminados. Puedes limpiarlos para que la sala quede en cero.</p>
-                  </div>
+            {/* SECCIÓN 2: PAGOS PENDIENTES DE VALIDACIÓN (SI LOS HAY) */}
+            {settlementRecords.filter(s => s.status === 'PENDING').length > 0 && (
+              <div className="bg-[var(--bg-card)] border border-amber-500/30 rounded-2xl p-5 shadow-xs">
+                <h4 className="text-sm font-bold text-amber-700 dark:text-amber-300 mb-3 flex items-center gap-2">
+                  <AlertCircle size={16} />
+                  <span>Avisos de pago pendientes de confirmación</span>
+                </h4>
+                <div className="space-y-2.5">
+                  {settlementRecords
+                    .filter(s => s.status === 'PENDING')
+                    .map(st => {
+                      const fromP = participants.find(p => p.id === st.from_id)?.name || 'Deudor';
+                      const toP = participants.find(p => p.id === st.to_id)?.name || 'Acreedor';
+                      const isCreditor = user && participants.find(p => p.id === st.to_id)?.user_id === user.id;
+
+                      return (
+                        <div
+                          key={st.id}
+                          className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-[var(--text-primary)]">{fromP}</span>
+                            <span className="text-[var(--text-muted)] mx-1">reportó haber pagado</span>
+                            <strong className="font-extrabold text-[var(--text-primary)]">
+                              {formatUSD(st.amount_usd || st.amount)}
+                            </strong>
+                            <span className="text-[var(--text-muted)] mx-1">a</span>
+                            <span className="font-bold text-[var(--text-primary)]">{toP}</span>
+                            {st.notes && <span className="italic ml-1 text-[var(--text-muted)]">({st.notes})</span>}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            {isCreditor || isOwner ? (
+                              <>
+                                <button
+                                  onClick={() => handleConfirmPayment(st.id)}
+                                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors"
+                                >
+                                  Confirmar cobro
+                                </button>
+                                <button
+                                  onClick={() => handleRejectPayment(st.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 font-semibold text-xs transition-colors"
+                                >
+                                  Rechazar
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                                Esperando confirmación de {toP}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
-                <button
-                  onClick={handleClearAllSettlements}
-                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium shrink-0 transition-colors shadow-xs cursor-pointer"
-                >
-                  Reiniciar sala a cero
-                </button>
               </div>
             )}
 
-            {/* AVISOS DE PAGOS PENDIENTES DE CONFIRMACIÓN */}
-            {settlementRecords.filter(s => s.status === 'PENDING').length > 0 && (
-              <div className="space-y-2">
-                {settlementRecords.filter(s => s.status === 'PENDING').map(st => {
-                  const fromP = participants.find(p => p.id === st.from_id);
-                  const toP = participants.find(p => p.id === st.to_id);
-                  const isCreditor = user && toP?.user_id === user.id;
-                  const isDebtor = user && fromP?.user_id === user.id;
-                  const canConfirm = isCreditor || (!toP?.user_id && isOwner);
+            {/* SECCIÓN 3: BALANCES GENERALES EN USD */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-xs">
+              <h3 className="text-base font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+                <DollarSign size={18} className="text-emerald-500" />
+                <span>Balances Individuales (USD)</span>
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-4">
+                Posición neta de cada participante tras registrar gastos y pagos
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {balances.map(b => {
+                  const part = participants.find(p => p.id === b.participantId);
+                  const isZero = Math.abs(b.balance) < 0.01;
+                  const isPositive = b.balance > 0.01;
 
                   return (
-                    <div key={st.id} className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-500/20 text-amber-500 rounded-xl shrink-0">
-                          <Clock size={18} />
+                    <div
+                      key={b.participantId}
+                      className="p-3.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${getAvatarColor(
+                            b.name
+                          )} text-white text-xs font-bold flex items-center justify-center shrink-0`}
+                        >
+                          {getInitials(b.name)}
                         </div>
-                        <div>
-                          <p className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
-                            Pago reportado por <span className="font-bold text-red-500">{fromP?.name || 'Deudor'}</span> a <span className="font-bold text-emerald-500">{toP?.name || 'Acreedor'}</span>
-                          </p>
-                          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                            Monto: <span className="font-bold text-[var(--text-primary)]">{formatUSD(st.amount_usd || st.amount)}</span>
-                            {st.notes && ` — "${st.notes}"`}
-                          </p>
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-bold text-[var(--text-primary)] truncate">
+                            {b.name} {part?.user_id === user?.id ? '(Tú)' : ''}
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)]">
+                            {isZero ? 'Al día ($0.00)' : isPositive ? 'Le deben' : 'Debe'}
+                          </div>
                         </div>
                       </div>
 
-                      {canConfirm ? (
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                          <button
-                            onClick={() => handleConfirmPayment(st.id)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                          >
-                            <Check size={14} /> Confirmar cobrado
-                          </button>
-                          <button
-                            onClick={() => handleRejectPayment(st.id)}
-                            className="bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-medium px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <X size={14} /> Rechazar
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-medium bg-amber-500/20 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full self-start sm:self-center">
-                          {isDebtor ? 'Esperando confirmacion de tu pago' : `Pendiente de confirmacion por ${toP?.name || 'acreedor'}`}
-                        </span>
-                      )}
+                      <div
+                        className={`text-sm sm:text-base font-extrabold shrink-0 ${
+                          isZero
+                            ? 'text-[var(--text-muted)]'
+                            : isPositive
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {isZero ? '$ 0.00' : isPositive ? `+ ${formatUSD(b.balance)}` : `- ${formatUSD(Math.abs(b.balance))}`}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
+            </div>
 
-            <div className="grid md:grid-cols-2 gap-5">
-              {/* TARJETA DE BALANCES */}
-              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-[var(--border)]">
-                    <div>
-                      <h2 className="text-base font-bold text-[var(--text-primary)]">Balances (USD)</h2>
-                      <p className="text-xs text-[var(--text-muted)]">Consolidado en dolares</p>
-                    </div>
-                    {isBalanceZero ? (
-                      <span className="text-[11px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold">
-                        Cuadrado ($0.00)
-                      </span>
-                    ) : (
-                      <span className="text-[11px] bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">
-                        <AlertCircle size={11} className="inline mr-1" />Error: {balanceSum.toFixed(2)}
-                      </span>
-                    )}
-                  </div>
+            {/* SECCIÓN 4: HISTORIAL DE LIQUIDACIONES CONFIRMADAS */}
+            {settlementRecords.filter(s => s.status === 'CONFIRMED').length > 0 && (
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-xs">
+                <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] mb-1">
+                  Historial de Pagos y Condonaciones
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mb-4">
+                  Registro de auditoría de transferencias realizadas o deudas perdonadas
+                </p>
 
-                  <ul className="space-y-2.5">
-                    {balances.map(b => {
-                      const isMe = user && participants.find(p => p.id === b.participantId)?.user_id === user.id;
+                <div className="space-y-2">
+                  {settlementRecords
+                    .filter(s => s.status === 'CONFIRMED')
+                    .map(st => {
+                      const fromP = participants.find(p => p.id === st.from_id)?.name || 'Deudor';
+                      const toP = participants.find(p => p.id === st.to_id)?.name || 'Acreedor';
+                      const isForgiven = st.settlement_type === 'FORGIVEN';
+
                       return (
-                        <li key={b.participantId} className="flex justify-between items-center p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] transition-colors">
-                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                            <div className="w-8 h-8 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border)] flex items-center justify-center font-bold text-xs shrink-0">
-                              {getInitials(b.name)}
-                            </div>
-                            <span className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                              {b.name} {isMe && <span className="text-[10px] text-indigo-500 font-medium ml-1">(Tú)</span>}
+                        <div
+                          key={st.id}
+                          className="p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <span className="font-bold text-[var(--text-primary)]">{fromP}</span>
+                            <span className="text-[var(--text-muted)] mx-1">
+                              {isForgiven ? 'recibió condonación de' : 'pagó a'}
                             </span>
-                          </div>
-
-                          <div className="shrink-0">
-                            {Math.abs(b.balance) > 0.001 ? (
-                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                                b.balance > 0.001
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                              }`}>
-                                {b.balance > 0.001 ? `+${formatUSD(b.balance)}` : `-${formatUSD(Math.abs(b.balance))}`}
-                              </span>
-                            ) : (
-                              <span className="text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-card)] border border-[var(--border)] px-2.5 py-0.5 rounded-full">
-                                {formatUSD(0)}
+                            <span className="font-bold text-[var(--text-primary)]">{toP}</span>
+                            {st.notes && (
+                              <span className="text-[10px] text-[var(--text-muted)] italic ml-1">
+                                ({st.notes})
                               </span>
                             )}
                           </div>
-                        </li>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            <span className="font-extrabold text-[var(--text-primary)]">
+                              {formatUSD(st.amount_usd || st.amount)}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                isForgiven
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                              }`}
+                            >
+                              {isForgiven ? 'Perdonada' : 'Pagado'}
+                            </span>
+                            <button
+                              onClick={() => handleUndoSettlement(st)}
+                              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                              title="Deshacer este registro (reabrir deuda)"
+                            >
+                              <RotateCcw size={13} />
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
-                    {balances.length === 0 && <p className="text-sm text-[var(--text-muted)] text-center py-4">Sin datos de participantes</p>}
-                  </ul>
-                </div>
-
-                <div className="mt-5 p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1">
-                  <p className="font-semibold text-[var(--text-primary)]">Guia de balances</p>
-                  <p><span className="text-emerald-500 font-bold">Verde (+)</span>: Le deben dinero al participante.</p>
-                  <p><span className="text-rose-500 font-bold">Rojo (-)</span>: El participante debe dinero a otros.</p>
                 </div>
               </div>
+            )}
 
-              {/* TARJETA DE TRANSFERENCIAS */}
-              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs flex flex-col justify-between">
+            {/* SECCIÓN 5: ZONA DE REINICIO DE SALA (ADMINISTRACIÓN) */}
+            {isOwner && (
+              <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-[var(--border)]">
-                    <div>
-                      <h2 className="text-base font-bold text-[var(--text-primary)]">Transferencias</h2>
-                      <p className="text-xs text-[var(--text-muted)]">Como saldar deudas</p>
-                    </div>
-                    {settlements.length > 0 && (
-                      <button
-                        onClick={shareToWhatsApp}
-                        className="flex items-center gap-1.5 text-xs font-semibold bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                      >
-                        <MessageCircle size={14} /> Compartir
-                      </button>
-                    )}
-                  </div>
-
-                  {settlements.length === 0 ? (
-                    <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-2xl">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-2">
-                        <Check size={20} />
-                      </div>
-                      <p className="text-sm font-bold text-[var(--text-primary)]">Todos a mano</p>
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5">No hay deudas pendientes en esta sala</p>
-                    </div>
-                  ) : (
-                    <ul className="space-y-3">
-                      {settlements.map((t, i) => {
-                        const debtorPart = participants.find(p => p.id === t.from_id);
-                        const creditorPart = participants.find(p => p.id === t.to_id);
-                        const isDebtor = user && debtorPart?.user_id === user.id;
-                        const isCreditor = user && creditorPart?.user_id === user.id;
-
-                        return (
-                          <li key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] space-y-3">
-                            {/* Visualización clara de la transferencia */}
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className="w-7 h-7 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center justify-center shrink-0">
-                                  {getInitials(t.from)}
-                                </div>
-                                <span className="text-sm font-bold text-rose-600 dark:text-rose-400 truncate">
-                                  {t.from}
-                                </span>
-                              </div>
-
-                              <div className="flex flex-col items-center shrink-0">
-                                <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">debe</span>
-                                <div className="flex items-center gap-1 bg-[var(--bg-card)] px-3 py-1 rounded-full border border-[var(--border)] shadow-2xs">
-                                  <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">{formatUSD(t.amount)}</span>
-                                  <ArrowRight size={13} className="text-[var(--text-muted)]" />
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
-                                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 truncate text-right">
-                                  {t.to}
-                                </span>
-                                <div className="w-7 h-7 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
-                                  {getInitials(t.to)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Acciones de liquidación según rol */}
-                            <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]/70 justify-between">
-                              <span className="text-[11px] text-[var(--text-muted)] italic">
-                                {isDebtor ? 'Tu deuda' : isCreditor ? 'Te deben' : 'Transferencia sugerida'}
-                              </span>
-
-                              <div className="flex items-center gap-2">
-                                {isDebtor && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
-                                  >
-                                    Reportar Pago
-                                  </button>
-                                )}
-
-                                {isCreditor && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
-                                      title="Registrar que ya recibiste este pago"
-                                    >
-                                      Registrar Cobro
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
-                                      className="text-xs bg-[var(--bg-card)] hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 cursor-pointer"
-                                      title="Condonar/perdonar la deuda a este participante"
-                                    >
-                                      Perdonar
-                                    </button>
-                                  </>
-                                )}
-
-                                {!isDebtor && !isCreditor && isOwner && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                      className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
-                                    >
-                                      Registrar Pago
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
-                                      className="text-xs bg-[var(--bg-card)] hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 cursor-pointer"
-                                      title="Perdonar deuda en nombre del acreedor"
-                                    >
-                                      Perdonar (Acreedor)
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  <h4 className="text-xs sm:text-sm font-bold text-red-600 dark:text-red-400">
+                    Reiniciar sala desde cero
+                  </h4>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    Elimina todos los gastos y liquidaciones si deseas comenzar un nuevo viaje limpio.
+                  </p>
                 </div>
-              </div>
-            </div>
-
-            {/* HISTORIAL DE DEUDAS CANCELADAS Y CONDONADAS CON OPCIÓN DE ELIMINAR/REVERTIR */}
-            {settlementRecords.filter(s => s.status === 'CONFIRMED').length > 0 && (
-              <div className="p-5 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs">
-                <div className="flex justify-between items-center mb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                      Deudas canceladas / Pagos confirmados ({settlementRecords.filter(s => s.status === 'CONFIRMED').length})
-                    </h3>
-                    <p className="text-xs text-[var(--text-muted)]">Historial de transferencias saldadas</p>
-                  </div>
-                  <button
-                    onClick={handleClearAllSettlements}
-                    className="text-xs text-red-500 hover:underline font-medium"
-                    title="Eliminar todas las liquidaciones"
-                  >
-                    Reiniciar todas
-                  </button>
-                </div>
-
-                <ul className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {settlementRecords.filter(s => s.status === 'CONFIRMED').map(st => {
-                    const fromP = participants.find(p => p.id === st.from_id)?.name || 'Deudor';
-                    const toP = participants.find(p => p.id === st.to_id)?.name || 'Acreedor';
-                    const isForgiven = st.settlement_type === 'FORGIVEN';
-                    return (
-                      <li key={st.id} className="text-xs flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
-                        <div className="min-w-0 pr-2">
-                          <span className="font-semibold text-[var(--text-primary)]">{fromP}</span>
-                          <span className="text-[var(--text-muted)] mx-1">{isForgiven ? 'recibio perdon de' : 'pago a'}</span>
-                          <span className="font-semibold text-[var(--text-primary)]">{toP}</span>
-                          {st.notes && <span className="text-[10px] text-[var(--text-muted)] ml-1.5 italic">({st.notes})</span>}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-bold text-[var(--text-primary)]">{formatUSD(st.amount_usd || st.amount)}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isForgiven ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'}`}>
-                            {isForgiven ? 'Perdonada' : 'Pagado'}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteSettlement(st.id)}
-                            className="text-[var(--text-muted)] hover:text-red-500 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                            title="Eliminar este registro de liquidacion"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <button
+                  onClick={handleResetRoomToZero}
+                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors self-end sm:self-auto shrink-0 shadow-xs btn-press"
+                >
+                  Reiniciar Sala a Cero
+                </button>
               </div>
             )}
           </div>
         )}
 
-        {/* MODAL PARA PAGAR O PERDONAR DEUDA (MUERTE A LA DEUDA) */}
+        {/* ========================================================= */}
+        {/* PESTAÑA 3: PARTICIPANTES                                  */}
+        {/* ========================================================= */}
+        {activeTab === 'participants' && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+                  Miembros de la Sala
+                </h2>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Personas que participan en la división de cuentas
+                </p>
+              </div>
+
+              {/* Formulario rápido para agregar participante local */}
+              <form onSubmit={handleAddParticipant} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newPartName}
+                  onChange={e => setNewPartName(e.target.value)}
+                  placeholder="Nombre de participante..."
+                  className="px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all btn-press flex items-center gap-1 shrink-0"
+                >
+                  <Plus size={14} />
+                  <span>Agregar</span>
+                </button>
+              </form>
+            </div>
+
+            {addPartError && <FormError message={addPartError} />}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {participants.map(part => {
+                const bal = balances.find(b => b.participantId === part.id);
+                const isZero = !bal || Math.abs(bal.balance) < 0.01;
+                const isPositive = bal && bal.balance > 0.01;
+                const isMemberOwner = part.user_id === group?.owner_id;
+
+                return (
+                  <div
+                    key={part.id}
+                    className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] transition-all flex flex-col justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${getAvatarColor(
+                          part.name
+                        )} text-white font-bold text-xs flex items-center justify-center shrink-0`}
+                      >
+                        {getInitials(part.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                            {part.name}
+                          </h4>
+                          {part.user_id === user?.id && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 font-bold">
+                              Tú
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          {isMemberOwner ? 'Organizador' : part.user_id ? 'Usuario Registrado' : 'Invitado'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-xs">
+                      <span className="text-[var(--text-muted)] font-medium">Balance neto:</span>
+                      <span
+                        className={`font-extrabold ${
+                          isZero
+                            ? 'text-[var(--text-muted)]'
+                            : isPositive
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {isZero ? '$ 0.00' : isPositive ? `+ ${formatUSD(bal.balance)}` : `- ${formatUSD(Math.abs(bal.balance))}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* MODAL PARA LIQUIDAR O PERDONAR DEUDA                      */}
+        {/* ========================================================= */}
         {settleModalOpen && (() => {
           const debtorPart = participants.find(p => p.id === settleFromId);
-          const creditorPart = participants.find(p => p.id === settleToId);
           const isDebtorInModal = user && debtorPart?.user_id === user.id;
-          const isCreditorInModal = user && creditorPart?.user_id === user.id;
 
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-150">
-              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-xl space-y-4">
-                <div className="flex justify-between items-center border-b border-[var(--border)] pb-3">
-                  <h3 className="text-base font-semibold text-[var(--text-primary)]">
-                    {settleType === 'PAYMENT'
-                      ? (isDebtorInModal ? 'Reportar Pago de Deuda' : 'Registrar Pago')
-                      : 'Perdonar Deuda (Condonacion)'}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-150">
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-in">
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                  <h3 className="text-base font-bold text-[var(--text-primary)]">
+                    {settleType === 'FORGIVEN' ? 'Perdonar Deuda' : isDebtorInModal ? 'Reportar Pago' : 'Registrar Cobro'}
                   </h3>
                   <button
-                    type="button"
                     onClick={() => setSettleModalOpen(false)}
                     className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
                   >
@@ -1353,112 +1780,83 @@ export default function CuentaDetailPage() {
                   </button>
                 </div>
 
-                <form onSubmit={handleSaveSettlement} className="space-y-3">
-                  <FormError message={settleError} />
-
-                  <div className="text-xs p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] space-y-1">
-                    <p className="text-[var(--text-secondary)]">
-                      <span className="font-semibold text-red-500">Deudor:</span> {debtorPart?.name || 'Deudor'} {isDebtorInModal && '(Tu)'}
-                    </p>
-                    <p className="text-[var(--text-secondary)]">
-                      <span className="font-semibold text-emerald-500">Acreedor:</span> {creditorPart?.name || 'Acreedor'} {isCreditorInModal && '(Tu)'}
-                    </p>
-                  </div>
-
-                  {/* Tipo de operacion: El deudor NUNCA puede perdonar su propia deuda */}
-                  {isDebtorInModal ? (
-                    <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-500/10 rounded-lg border border-indigo-100 dark:border-indigo-500/20 text-xs">
-                      <p className="font-semibold text-indigo-700 dark:text-indigo-300">Reporte de Pago</p>
-                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                        Como deudor, reportas que realizaste el pago a {creditorPart?.name || 'tu acreedor'}. Se le solicitará confirmación para cancelar la deuda.
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                        {isCreditorInModal ? 'Accion como acreedor' : 'Tipo de operacion'}
-                      </label>
-                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] text-xs font-medium">
-                        <button
-                          type="button"
-                          onClick={() => setSettleType('PAYMENT')}
-                          className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'PAYMENT' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                        >
-                          {isCreditorInModal ? 'Registrar Cobro' : 'Registrar Pago'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSettleType('FORGIVEN')}
-                          className={`py-1.5 px-2 rounded-md transition-colors text-center ${settleType === 'FORGIVEN' ? 'bg-amber-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                        >
-                          Perdonar Deuda
-                        </button>
-                      </div>
+                <form onSubmit={handleSaveSettlement} className="space-y-4">
+                  {/* Selector de tipo solo si NO es el deudor */}
+                  {!isDebtorInModal && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSettleType('PAYMENT')}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
+                          settleType === 'PAYMENT'
+                            ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                            : 'border-[var(--border)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        Cobrado en Mano
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettleType('FORGIVEN')}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
+                          settleType === 'FORGIVEN'
+                            ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300'
+                            : 'border-[var(--border)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        Perdonar Deuda
+                      </button>
                     </div>
                   )}
 
-                  {/* Monto y Moneda fija en USD */}
                   <div>
-                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                      Monto ({settleType === 'PAYMENT' ? 'a pagar' : 'a perdonar'})
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                      Monto a liquidar (USD)
                     </label>
-                    <div className="flex gap-2">
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[var(--text-muted)]">
+                        $
+                      </span>
                       <input
                         type="number"
                         step="0.01"
-                        min="0.01"
                         value={settleAmount}
                         onChange={e => setSettleAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="flex-1 px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full pl-8 pr-4 py-2.5 text-base font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                        required
                       />
-                      <div className="px-3 py-2 text-sm font-bold border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] flex items-center justify-center min-w-[75px]">
-                        USD ($)
-                      </div>
                     </div>
-                    <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                      La liquidacion final se consolida y procesa en Dolares (USD).
-                    </p>
                   </div>
 
-                  {/* Notas opcionales */}
                   <div>
-                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Notas (opcional)</label>
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1">
+                      Notas o referencia (opcional)
+                    </label>
                     <input
                       type="text"
                       value={settleNotes}
                       onChange={e => setSettleNotes(e.target.value)}
-                      placeholder="Ej. Transferencia QR, efectivo"
-                      className="w-full px-3 py-2 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Ej. Transferencia QR, efectivo..."
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
 
-                  <div className="text-[11px] p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-[var(--text-secondary)]">
-                    {settleType === 'PAYMENT'
-                      ? (isDebtorInModal
-                          ? 'Al reportar, se enviara un aviso para que el acreedor confirme la recepcion del dinero.'
-                          : 'Al guardar, el cobro se confirmara inmediatamente y la deuda quedara saldada.')
-                      : 'Al perdonar, la deuda quedara condonada de inmediato y el balance de la sala se actualizara.'}
-                  </div>
+                  {settleError && <FormError message={settleError} />}
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex justify-end gap-2 pt-2">
                     <button
                       type="button"
                       onClick={() => setSettleModalOpen(false)}
-                      className="flex-1 py-2 px-4 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                      className="px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)]"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={settleLoading}
-                      className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 ${settleType === 'PAYMENT' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                      className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all btn-press disabled:opacity-50"
                     >
-                      {settleLoading
-                        ? 'Guardando...'
-                        : settleType === 'PAYMENT'
-                          ? (isDebtorInModal ? 'Reportar Pago' : 'Confirmar Cobro')
-                          : 'Confirmar Perdon'}
+                      {settleLoading ? 'Procesando...' : settleType === 'FORGIVEN' ? 'Confirmar Perdón' : 'Confirmar'}
                     </button>
                   </div>
                 </form>
@@ -1466,7 +1864,16 @@ export default function CuentaDetailPage() {
             </div>
           );
         })()}
-      </div>
+
+        {/* MODAL DE CONFIRMACIÓN GENERAL */}
+        <ConfirmModal
+          isOpen={modal.isOpen}
+          title={modal.title}
+          message={modal.message}
+          onConfirm={modal.onConfirm}
+          onCancel={closeConfirm}
+        />
+      </main>
     </div>
   );
 }

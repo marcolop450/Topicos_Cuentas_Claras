@@ -23,6 +23,7 @@ export type Expense = {
   amount_usd: number;    // Monto convertido a USD (snapshot al guardar)
   payer_id: string;
   split_mode?: SplitMode;
+  created_at?: string;
 };
 
 export type ExpenseSplit = {
@@ -58,8 +59,8 @@ export type Balance = {
 export type Transfer = {
   from: string; // name
   to: string;   // name
-  from_id?: string; // id del deudor
-  to_id?: string;   // id del acreedor
+  from_id: string; // id del deudor
+  to_id: string;   // id del acreedor
   amount: number; // en USD
 };
 
