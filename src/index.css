@@ -2,35 +2,45 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
   --bg-card: #ffffff;
+  --bg-card-hover: #fafafa;
   --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
+  --text-secondary: #475569;
   --text-muted: #94a3b8;
   --accent: #6366f1;
   --accent-hover: #4f46e5;
-  --positive: #10b981;
-  --negative: #ef4444;
+  --positive: #059669;
+  --positive-bg: rgba(16, 185, 129, 0.08);
+  --negative: #e11d48;
+  --negative-bg: rgba(225, 29, 72, 0.08);
+  --card-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05);
 }
 
 .dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: #1e293b;
-  --border: #334155;
-  --text-primary: #f1f5f9;
+  --bg-primary: #070b12;
+  --bg-secondary: #0c121e;
+  --bg-card: #111a2c;
+  --bg-card-hover: #152037;
+  --border: #1e2c45;
+  --border-subtle: #152034;
+  --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  --accent: #818cf8;
-  --accent-hover: #6366f1;
-  --positive: #34d399;
-  --negative: #f87171;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --positive: #10b981;
+  --positive-bg: rgba(16, 185, 129, 0.12);
+  --negative: #f43f5e;
+  --negative-bg: rgba(244, 63, 94, 0.12);
+  --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
 }
 
 body {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   margin: 0;
   transition: background-color 0.2s, color 0.2s;

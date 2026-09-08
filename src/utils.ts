@@ -124,6 +124,16 @@ export function calculateBalances(
     balancesMapCents[p.id] = 0;
   });
 
+  // Si no hay gastos en la sala, los balances son estrictamente 0.00 para todos.
+  // Liquidaciones de gastos que fueron eliminados no deben generar deudas artificiales.
+  if (expenses.length === 0) {
+    return participants.map(p => ({
+      participantId: p.id,
+      name: p.name,
+      balance: 0,
+    }));
+  }
+
   expenses.forEach(expense => {
     const usdAmount = expense.amount_usd > 0 ? expense.amount_usd : expense.amount;
     const totalCents = Math.round(usdAmount * 100);

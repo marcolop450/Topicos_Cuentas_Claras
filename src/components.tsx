@@ -37,41 +37,57 @@ export function Navbar({ backLabel, backTo, userName, onSignOut }: NavbarProps) 
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="bg-[var(--bg-card)] border-b border-[var(--border)] px-4 md:px-8 py-3.5 mb-6 transition-colors">
-      <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
-        <Link to="/" className="flex items-center gap-2 group shrink-0">
-          <div className="bg-indigo-500 p-1.5 rounded-lg">
+    <header className="sticky top-0 z-40 backdrop-blur-md bg-[var(--bg-card)]/90 border-b border-[var(--border)] px-4 md:px-8 py-3 mb-6 transition-colors shadow-xs">
+      <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
+          <div className="bg-gradient-to-tr from-indigo-600 to-indigo-500 p-2 rounded-xl shadow-xs group-hover:scale-105 transition-transform">
             <Calculator size={18} className="text-white" />
           </div>
-          <span className="text-base font-semibold text-[var(--text-primary)] hidden sm:block">Cuentas Claras</span>
+          <div className="flex flex-col">
+            <span className="text-sm sm:text-base font-bold text-[var(--text-primary)] tracking-tight">Cuentas Claras</span>
+            <span className="text-[10px] text-[var(--text-muted)] font-medium -mt-1 hidden sm:block">Finanzas entre amigos</span>
+          </div>
         </Link>
 
         <div className="flex items-center gap-2">
           {backLabel && backTo && (
-            <button onClick={() => navigate(backTo)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium">
+            <button
+              onClick={() => navigate(backTo)}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] px-3 py-1.5 rounded-lg transition-colors text-xs sm:text-sm font-medium border border-transparent hover:border-[var(--border)]"
+            >
               {backLabel}
             </button>
           )}
 
           {userName && (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] px-3 py-1.5 rounded-lg border border-[var(--border)]">
-              <UserCircle size={14} />
-              <span className="max-w-[120px] truncate">{userName}</span>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)] px-3 py-1.5 rounded-full border border-[var(--border)] font-medium">
+              <UserCircle size={15} className="text-indigo-500" />
+              <span className="max-w-[130px] truncate">{userName}</span>
             </div>
           )}
 
-          <button onClick={toggleTheme} className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors" title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border)] transition-all"
+            title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}
+            aria-label="Cambiar tema"
+          >
             {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
           </button>
 
           {onSignOut && (
-            <button onClick={onSignOut} className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Cerrar sesion">
+            <button
+              onClick={onSignOut}
+              className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 border border-transparent hover:border-red-200 dark:hover:border-red-500/20 transition-all"
+              title="Cerrar sesion"
+              aria-label="Cerrar sesión"
+            >
               <LogOut size={17} />
             </button>
           )}
         </div>
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -88,16 +104,26 @@ interface ConfirmModalProps {
 export function ConfirmModal({ isOpen, title, message, confirmLabel = 'Eliminar', onConfirm, onCancel }: ConfirmModalProps) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-[var(--bg-card)] rounded-xl shadow-xl max-w-sm w-full p-6 border border-[var(--border)] animate-fade-in">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+      <div className="bg-[var(--bg-card)] rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-[var(--border)] animate-in zoom-in-95 duration-150">
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-base font-semibold text-[var(--text-primary)]">{title}</h3>
-          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"><X size={20} /></button>
+          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors"><X size={18} /></button>
         </div>
-        <p className="text-sm text-[var(--text-secondary)] mb-5">{message}</p>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] font-medium rounded-lg transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">{confirmLabel}</button>
+        <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-5">{message}</p>
+        <div className="flex justify-end gap-2.5">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] font-medium rounded-xl border border-[var(--border)] transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl transition-colors shadow-xs"
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>

@@ -124,3 +124,11 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 ## 2026-09-08 11:40:51
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Recordar que la liquidacion es en Dolares al Final y Ahora por que el deudor pueda perdonar su deuda, Revisa toda la LOGICA, Y REVISA TODO EL PROYECTO PARA GENERAR PRUEBAS CORRECTAS Y SIN ERRPRES
+
+## 2026-09-08 11:52:52
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Elimine un gastos en Historial pero se mantuvo en la Liquidacion, Fallo ahi, Mejora tambien todoe l frontend mas profesional (Tanto como en Dark y Light) mejorar Todo Todo
+
+## 2026-09-08 11:54:07
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Alto, no me toques el SW1

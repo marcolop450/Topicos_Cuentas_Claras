@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
 import type { Group, Participant, Expense, ExpenseSplit, SplitMode, Settlement, SettlementType } from './utils';
-import { Trash2, Edit2, Users, Receipt, Calculator, AlertCircle, FolderOpen, ArrowRight, MessageCircle, RefreshCw, Clock, Check, X } from 'lucide-react';
+import { Trash2, Edit2, Users, Receipt, Calculator, AlertCircle, FolderOpen, ArrowRight, MessageCircle, RefreshCw, Clock, Check, X, Copy, CheckCheck } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -30,6 +30,7 @@ export default function CuentaDetailPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [splits, setSplits] = useState<ExpenseSplit[]>([]);
   const [settlementRecords, setSettlementRecords] = useState<Settlement[]>([]);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Tipos de cambio
   const [rates, setRates] = useState<RatesMap>({ USD: 1 });
@@ -290,9 +291,55 @@ export default function CuentaDetailPage() {
 
   function handleDeleteExpense(expenseId: string) {
     showConfirm('Eliminar Gasto', 'Esto afectara los balances de los participantes.', async () => {
-      await supabase.from('expenses').delete().eq('id', expenseId);
-      setExpenses(expenses.filter(e => e.id !== expenseId));
-      setSplits(splits.filter(s => s.expense_id !== expenseId));
+      try {
+        const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+        if (error) {
+          setFormError('Error al eliminar gasto: ' + error.message);
+          return;
+        }
+        const updatedExpenses = expenses.filter(e => e.id !== expenseId);
+        setExpenses(updatedExpenses);
+        setSplits(splits.filter(s => s.expense_id !== expenseId));
+
+        // Si ya no quedan gastos, limpiar automáticamente las liquidaciones huérfanas
+        if (updatedExpenses.length === 0 && settlementRecords.length > 0 && group?.id) {
+          await supabase.from('settlements').delete().eq('group_id', group.id);
+          setSettlementRecords([]);
+        }
+      } catch (err: any) {
+        setFormError('Error al eliminar gasto: ' + (err.message || err));
+      }
+    });
+  }
+
+  async function handleDeleteSettlement(settlementId: string) {
+    showConfirm('Eliminar Liquidacion', '¿Deseas eliminar este registro de pago o condonacion?', async () => {
+      try {
+        const { error } = await supabase.from('settlements').delete().eq('id', settlementId);
+        if (error) {
+          setFormError('Error al eliminar liquidacion: ' + error.message);
+          return;
+        }
+        setSettlementRecords(settlementRecords.filter(s => s.id !== settlementId));
+      } catch (err: any) {
+        setFormError('Error al eliminar liquidacion: ' + (err.message || err));
+      }
+    });
+  }
+
+  async function handleClearAllSettlements() {
+    showConfirm('Reiniciar Liquidaciones', '¿Eliminar todos los registros de pago y perdon para dejar las deudas en cero?', async () => {
+      try {
+        if (!group?.id) return;
+        const { error } = await supabase.from('settlements').delete().eq('group_id', group.id);
+        if (error) {
+          setFormError('Error al reiniciar liquidaciones: ' + error.message);
+          return;
+        }
+        setSettlementRecords([]);
+      } catch (err: any) {
+        setFormError('Error: ' + (err.message || err));
+      }
     });
   }
 
@@ -416,6 +463,20 @@ export default function CuentaDetailPage() {
     ? toUSD(parseFloat(amount), currency, rates)
     : 0;
 
+  function handleCopyCode() {
+    if (!group?.join_code) return;
+    navigator.clipboard.writeText(group.join_code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  }
+
+  function getInitials(name: string): string {
+    if (!name) return '??';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
   function shareToWhatsApp() {
     let text = `*Resumen - ${group?.name}*\nGasto total: ${formatUSD(totalUSD)}\n\n`;
     if (settlements.length === 0) {
@@ -429,9 +490,9 @@ export default function CuentaDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
+      <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
         <Navbar backLabel="Mis salas" backTo="/cuentas" onSignOut={signOut} />
-        <div className="p-8 text-center text-[var(--text-muted)]">Cargando...</div>
+        <div className="p-8 text-center text-[var(--text-muted)] text-sm">Cargando detalles de la sala...</div>
       </div>
     );
   }
@@ -443,15 +504,15 @@ export default function CuentaDetailPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
+    <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
       <Navbar backLabel="Mis salas" backTo="/cuentas" userName={user?.user_metadata?.name || user?.email} onSignOut={signOut} />
       <ConfirmModal isOpen={modal.isOpen} title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onCancel={closeConfirm} />
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 pb-12 animate-fade-in">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 pb-14 animate-in fade-in duration-200">
 
         {/* Aviso de tasas de respaldo */}
         {ratesFromFallback && (
-          <div className="mb-4 flex items-center gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs px-3 py-2.5 rounded-lg">
+          <div className="mb-4 flex items-center gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs px-3.5 py-2.5 rounded-xl">
             <AlertCircle size={14} className="shrink-0" />
             <span>Tasas de cambio estimadas (sin conexion a la API). Los montos en USD son aproximados.</span>
             <button
@@ -465,90 +526,158 @@ export default function CuentaDetailPage() {
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="bg-indigo-50 dark:bg-indigo-500/10 p-2.5 rounded-xl text-indigo-500 shrink-0">
+        {/* Header con estilo fintech moderno */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-[var(--bg-card)] p-4 sm:p-5 rounded-2xl border border-[var(--border)] shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="bg-gradient-to-tr from-indigo-600 to-indigo-400 p-3 rounded-2xl text-white shadow-xs shrink-0">
               <FolderOpen size={22} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-[var(--text-primary)]">{group?.name}</h1>
-                {isOwner && <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded font-semibold">DUEÑO</span>}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">{group?.name}</h1>
+                {isOwner && (
+                  <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold">
+                    ADMIN
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-[var(--text-muted)]">{participants.length} participantes / {expenses.length} gastos</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-2">
+                <span>{participants.length} {participants.length === 1 ? 'participante' : 'participantes'}</span>
+                <span>•</span>
+                <span>{expenses.length} {expenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}</span>
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-lg px-3 py-2">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Codigo</span>
-              <span className="font-mono font-bold text-sm text-indigo-500 tracking-widest">{group?.join_code}</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-lg px-3 py-2">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Total (USD)</span>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleCopyCode}
+              title="Copiar codigo de sala"
+              className="flex items-center gap-2 bg-[var(--bg-secondary)] hover:bg-[var(--border)]/60 border border-[var(--border)] rounded-xl px-3 py-2 transition-all cursor-pointer group"
+            >
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Codigo</span>
+                <span className="font-mono font-bold text-sm text-indigo-500 tracking-wider">{group?.join_code}</span>
+              </div>
+              {copiedCode ? <CheckCheck size={16} className="text-emerald-500 ml-1 shrink-0" /> : <Copy size={15} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors ml-1 shrink-0" />}
+            </button>
+
+            <div className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Total Gastado</span>
               <span className="font-bold text-sm text-[var(--text-primary)]">{formatUSD(totalUSD)}</span>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-5 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border)] transition-colors overflow-x-auto">
-          {tabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 px-3 rounded-lg transition-colors text-sm font-medium whitespace-nowrap ${activeTab === tab.key ? 'bg-indigo-500 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}>
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+        {/* Tabs Segmentados */}
+        <div className="flex gap-1.5 mb-6 bg-[var(--bg-card)] p-1.5 rounded-2xl border border-[var(--border)] transition-colors shadow-2xs overflow-x-auto">
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.key;
+            let badgeCount: number | null = null;
+            if (tab.key === 'participants') badgeCount = participants.length;
+            if (tab.key === 'expenses') badgeCount = expenses.length;
+            const pendingPayments = settlementRecords.filter(s => s.status === 'PENDING').length;
+
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 flex justify-center items-center gap-2 py-2.5 px-3.5 rounded-xl transition-all text-xs sm:text-sm font-semibold whitespace-nowrap ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                {badgeCount !== null && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'}`}>
+                    {badgeCount}
+                  </span>
+                )}
+                {tab.key === 'balances' && pendingPayments > 0 && (
+                  <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+                    {pendingPayments}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* PARTICIPANTES */}
         {activeTab === 'participants' && (
-          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl transition-colors">
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs space-y-4">
             {!isOwner && (
-              <div className="p-4 sm:p-5 border-b border-[var(--border)] flex justify-between items-center">
+              <div className="p-4 border border-[var(--border)] rounded-xl flex justify-between items-center bg-[var(--bg-secondary)]">
                 <div>
-                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Salir de la sala</h2>
-                  <p className="text-sm text-[var(--text-secondary)] mt-1">Abandonar este grupo y eliminarte de la lista (si no tienes deudas).</p>
+                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">Salir de la sala</h2>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">Abandonar este grupo y eliminarte de la lista (si no tienes deudas pendientes).</p>
                 </div>
-                <button onClick={handleLeaveGroup} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
+                <button onClick={handleLeaveGroup} className="bg-red-500 hover:bg-red-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0">
                   Salir
                 </button>
               </div>
             )}
 
-            <div className="p-4 sm:p-5">
-              <FormError message={formError} />
+            <FormError message={formError} />
 
-              <div className="flex justify-between items-center mb-3 mt-1">
-                <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Usuarios unidos ({participants.length})</p>
-              </div>
+            <div className="flex justify-between items-center">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Miembros del grupo ({participants.length})</p>
+            </div>
 
-              {participants.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] text-center py-4">Sin participantes</p>
-              ) : (
-                <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  {participants.map(p => {
-                    const isMe = p.user_id === user?.id;
-                    const pBalance = balances.find(b => b.participantId === p.id);
-                    const balanceVal = pBalance ? pBalance.balance : 0;
+            {participants.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)] text-center py-6">Sin participantes</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {participants.map(p => {
+                  const isMe = p.user_id === user?.id;
+                  const pBalance = balances.find(b => b.participantId === p.id);
+                  const balanceVal = pBalance ? pBalance.balance : 0;
 
-                    return (
-                      <li key={p.id} className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${isMe ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-500/10' : 'border-[var(--border)] bg-[var(--bg-secondary)]'} transition-colors`}>
-                        <span className={`text-sm font-medium truncate ${isMe ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-primary)]'}`}>
-                          {p.name} {isMe && '(Tu)'}
-                        </span>
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                        isMe
+                          ? 'border-indigo-500/50 bg-indigo-500/5 shadow-xs'
+                          : 'border-[var(--border)] bg-[var(--bg-secondary)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                          isMe ? 'bg-indigo-600 text-white' : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border)]'
+                        }`}>
+                          {getInitials(p.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                            {p.name}
+                          </p>
+                          {isMe && <span className="text-[10px] text-indigo-500 font-medium">Tú</span>}
+                        </div>
+                      </div>
 
-                        {Math.abs(balanceVal) > 0.01 && (
-                          <span className={`text-xs font-bold shrink-0 ml-2 ${balanceVal > 0.001 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      <div className="shrink-0">
+                        {Math.abs(balanceVal) > 0.01 ? (
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                            balanceVal > 0.001
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                          }`}>
                             {balanceVal > 0.001 ? `+${formatUSD(balanceVal)}` : `-${formatUSD(Math.abs(balanceVal))}`}
                           </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-[var(--text-muted)] bg-[var(--bg-card)] border border-[var(--border)] px-2.5 py-1 rounded-full">
+                            Al día
+                          </span>
                         )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -876,7 +1005,26 @@ export default function CuentaDetailPage() {
 
         {/* LIQUIDACION */}
         {activeTab === 'balances' && (
-          <div className="space-y-4">
+          <div className="space-y-5">
+            {/* AVISO DE REGISTROS DE LIQUIDACIÓN HUÉRFANOS SI NO HAY GASTOS */}
+            {expenses.length === 0 && settlementRecords.length > 0 && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-700 dark:text-amber-300 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <AlertCircle size={18} className="shrink-0 text-amber-500" />
+                  <div>
+                    <p className="font-semibold text-sm">Registros de liquidación sin gastos activos</p>
+                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">Se detectaron pagos o perdones de gastos que fueron eliminados. Puedes limpiarlos para que la sala quede en cero.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClearAllSettlements}
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium shrink-0 transition-colors shadow-xs cursor-pointer"
+                >
+                  Reiniciar sala a cero
+                </button>
+              </div>
+            )}
+
             {/* AVISOS DE PAGOS PENDIENTES DE CONFIRMACIÓN */}
             {settlementRecords.filter(s => s.status === 'PENDING').length > 0 && (
               <div className="space-y-2">
@@ -888,37 +1036,39 @@ export default function CuentaDetailPage() {
                   const canConfirm = isCreditor || (!toP?.user_id && isOwner);
 
                   return (
-                    <div key={st.id} className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <Clock size={18} className="text-amber-500 shrink-0" />
+                    <div key={st.id} className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500/20 text-amber-500 rounded-xl shrink-0">
+                          <Clock size={18} />
+                        </div>
                         <div>
-                          <p className="text-xs sm:text-sm font-semibold text-amber-900 dark:text-amber-200">
-                            Pago reportado por <span className="underline">{fromP?.name || 'Deudor'}</span> a <span className="underline">{toP?.name || 'Acreedor'}</span>
+                          <p className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
+                            Pago reportado por <span className="font-bold text-red-500">{fromP?.name || 'Deudor'}</span> a <span className="font-bold text-emerald-500">{toP?.name || 'Acreedor'}</span>
                           </p>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                            Monto: <span className="font-bold">{formatUSD(st.amount_usd || st.amount)}</span>
+                          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                            Monto: <span className="font-bold text-[var(--text-primary)]">{formatUSD(st.amount_usd || st.amount)}</span>
                             {st.notes && ` — "${st.notes}"`}
                           </p>
                         </div>
                       </div>
 
                       {canConfirm ? (
-                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                           <button
                             onClick={() => handleConfirmPayment(st.id)}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                           >
-                            <Check size={13} /> Confirmar cobrado
+                            <Check size={14} /> Confirmar cobrado
                           </button>
                           <button
                             onClick={() => handleRejectPayment(st.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-medium px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
-                            <X size={13} /> Rechazar
+                            <X size={14} /> Rechazar
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[11px] font-medium bg-amber-200/60 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-full self-start sm:self-center">
+                        <span className="text-xs font-medium bg-amber-500/20 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full self-start sm:self-center">
                           {isDebtor ? 'Esperando confirmacion de tu pago' : `Pendiente de confirmacion por ${toP?.name || 'acreedor'}`}
                         </span>
                       )}
@@ -928,156 +1078,246 @@ export default function CuentaDetailPage() {
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Balances (USD)</h2>
-                  {!isBalanceZero && <span className="text-xs bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 px-2 py-1 rounded-full font-medium"><AlertCircle size={10} className="inline mr-1" />Error: {balanceSum.toFixed(4)}</span>}
-                </div>
-                <ul className="space-y-2">
-                  {balances.map(b => (
-                    <li key={b.participantId} className="flex justify-between items-center p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
-                      <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{b.name}</span>
-                      <span className={`text-sm font-bold shrink-0 ${b.balance > 0.001 ? 'text-emerald-500' : b.balance < -0.001 ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
-                        {b.balance > 0.001 ? `+${formatUSD(b.balance)}` : b.balance < -0.001 ? `-${formatUSD(Math.abs(b.balance))}` : formatUSD(0)}
+            <div className="grid md:grid-cols-2 gap-5">
+              {/* TARJETA DE BALANCES */}
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-[var(--border)]">
+                    <div>
+                      <h2 className="text-base font-bold text-[var(--text-primary)]">Balances (USD)</h2>
+                      <p className="text-xs text-[var(--text-muted)]">Consolidado en dolares</p>
+                    </div>
+                    {isBalanceZero ? (
+                      <span className="text-[11px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                        Cuadrado ($0.00)
                       </span>
-                    </li>
-                  ))}
-                  {balances.length === 0 && <p className="text-sm text-[var(--text-muted)] text-center py-3">Sin datos</p>}
-                </ul>
-                <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-500/5 rounded-lg border border-indigo-100 dark:border-indigo-500/10">
-                  <p className="font-medium text-xs text-indigo-600 dark:text-indigo-400 mb-1">Referencia</p>
-                  <p className="text-xs text-[var(--text-secondary)]"><span className="text-emerald-500 font-medium">Verde (+)</span> = le deben</p>
-                  <p className="text-xs text-[var(--text-secondary)]"><span className="text-red-500 font-medium">Rojo (-)</span> = debe</p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">Todos los montos consolidados en USD.</p>
-                </div>
-              </div>
-
-              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-4 sm:p-5 transition-colors">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Transferencias</h2>
-                  {settlements.length > 0 && (
-                    <button onClick={shareToWhatsApp} className="flex items-center gap-1.5 text-xs font-medium bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors">
-                      <MessageCircle size={13} /> Compartir
-                    </button>
-                  )}
-                </div>
-                {settlements.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-lg">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">Todos a mano</p>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">No hay deudas pendientes</p>
+                    ) : (
+                      <span className="text-[11px] bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                        <AlertCircle size={11} className="inline mr-1" />Error: {balanceSum.toFixed(2)}
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <ul className="space-y-3">
-                    {settlements.map((t, i) => {
-                      const debtorPart = participants.find(p => p.id === t.from_id);
-                      const creditorPart = participants.find(p => p.id === t.to_id);
-                      const isDebtor = user && debtorPart?.user_id === user.id;
-                      const isCreditor = user && creditorPart?.user_id === user.id;
 
+                  <ul className="space-y-2.5">
+                    {balances.map(b => {
+                      const isMe = user && participants.find(p => p.id === b.participantId)?.user_id === user.id;
                       return (
-                        <li key={i} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-red-500 flex-1 truncate text-right">{t.from}</span>
-                            <div className="flex flex-col items-center shrink-0">
-                              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">paga</span>
-                              <div className="flex items-center gap-1.5 bg-[var(--bg-card)] px-2.5 py-1 rounded-md border border-[var(--border)]">
-                                <span className="text-sm font-bold text-[var(--text-primary)] whitespace-nowrap">{formatUSD(t.amount)}</span>
-                                <ArrowRight size={13} className="text-[var(--text-muted)]" />
-                              </div>
+                        <li key={b.participantId} className="flex justify-between items-center p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] transition-colors">
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div className="w-8 h-8 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border)] flex items-center justify-center font-bold text-xs shrink-0">
+                              {getInitials(b.name)}
                             </div>
-                            <span className="text-sm font-semibold text-emerald-500 flex-1 truncate">{t.to}</span>
+                            <span className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                              {b.name} {isMe && <span className="text-[10px] text-indigo-500 font-medium ml-1">(Tú)</span>}
+                            </span>
                           </div>
 
-                          {/* Acciones de liquidación según rol: el deudor solo reporta pago; solo el acreedor perdona */}
-                          <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)] justify-end">
-                            {isDebtor && (
-                              <button
-                                type="button"
-                                onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
-                              >
-                                Reportar Pago
-                              </button>
-                            )}
-
-                            {isCreditor && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
-                                  title="Registrar que ya recibiste este pago"
-                                >
-                                  Registrar Cobro
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
-                                  className="text-xs bg-[var(--bg-card)] hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
-                                  title="Condonar/perdonar la deuda a este participante"
-                                >
-                                  Perdonar
-                                </button>
-                              </>
-                            )}
-
-                            {!isDebtor && !isCreditor && isOwner && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
-                                  className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
-                                >
-                                  Registrar Pago
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
-                                  className="text-xs bg-[var(--bg-card)] hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 px-2.5 py-1.5 rounded-md transition-colors font-medium flex items-center gap-1"
-                                  title="Perdonar deuda (como administrador en nombre del acreedor)"
-                                >
-                                  Perdonar (Acreedor)
-                                </button>
-                              </>
-                            )}
-
-                            {!isDebtor && !isCreditor && !isOwner && (
-                              <span className="text-[11px] text-[var(--text-muted)] italic">
-                                Pendiente
+                          <div className="shrink-0">
+                            {Math.abs(b.balance) > 0.001 ? (
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                                b.balance > 0.001
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                              }`}>
+                                {b.balance > 0.001 ? `+${formatUSD(b.balance)}` : `-${formatUSD(Math.abs(b.balance))}`}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-card)] border border-[var(--border)] px-2.5 py-0.5 rounded-full">
+                                {formatUSD(0)}
                               </span>
                             )}
                           </div>
                         </li>
                       );
                     })}
+                    {balances.length === 0 && <p className="text-sm text-[var(--text-muted)] text-center py-4">Sin datos de participantes</p>}
                   </ul>
-                )}
+                </div>
+
+                <div className="mt-5 p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1">
+                  <p className="font-semibold text-[var(--text-primary)]">Guia de balances</p>
+                  <p><span className="text-emerald-500 font-bold">Verde (+)</span>: Le deben dinero al participante.</p>
+                  <p><span className="text-rose-500 font-bold">Rojo (-)</span>: El participante debe dinero a otros.</p>
+                </div>
+              </div>
+
+              {/* TARJETA DE TRANSFERENCIAS */}
+              <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 transition-colors shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-[var(--border)]">
+                    <div>
+                      <h2 className="text-base font-bold text-[var(--text-primary)]">Transferencias</h2>
+                      <p className="text-xs text-[var(--text-muted)]">Como saldar deudas</p>
+                    </div>
+                    {settlements.length > 0 && (
+                      <button
+                        onClick={shareToWhatsApp}
+                        className="flex items-center gap-1.5 text-xs font-semibold bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                      >
+                        <MessageCircle size={14} /> Compartir
+                      </button>
+                    )}
+                  </div>
+
+                  {settlements.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-[var(--border)] rounded-2xl">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-2">
+                        <Check size={20} />
+                      </div>
+                      <p className="text-sm font-bold text-[var(--text-primary)]">Todos a mano</p>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">No hay deudas pendientes en esta sala</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {settlements.map((t, i) => {
+                        const debtorPart = participants.find(p => p.id === t.from_id);
+                        const creditorPart = participants.find(p => p.id === t.to_id);
+                        const isDebtor = user && debtorPart?.user_id === user.id;
+                        const isCreditor = user && creditorPart?.user_id === user.id;
+
+                        return (
+                          <li key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] space-y-3">
+                            {/* Visualización clara de la transferencia */}
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <div className="w-7 h-7 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                  {getInitials(t.from)}
+                                </div>
+                                <span className="text-sm font-bold text-rose-600 dark:text-rose-400 truncate">
+                                  {t.from}
+                                </span>
+                              </div>
+
+                              <div className="flex flex-col items-center shrink-0">
+                                <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">debe</span>
+                                <div className="flex items-center gap-1 bg-[var(--bg-card)] px-3 py-1 rounded-full border border-[var(--border)] shadow-2xs">
+                                  <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">{formatUSD(t.amount)}</span>
+                                  <ArrowRight size={13} className="text-[var(--text-muted)]" />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
+                                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 truncate text-right">
+                                  {t.to}
+                                </span>
+                                <div className="w-7 h-7 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                  {getInitials(t.to)}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Acciones de liquidación según rol */}
+                            <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]/70 justify-between">
+                              <span className="text-[11px] text-[var(--text-muted)] italic">
+                                {isDebtor ? 'Tu deuda' : isCreditor ? 'Te deben' : 'Transferencia sugerida'}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                {isDebtor && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
+                                  >
+                                    Reportar Pago
+                                  </button>
+                                )}
+
+                                {isCreditor && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
+                                      title="Registrar que ya recibiste este pago"
+                                    >
+                                      Registrar Cobro
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
+                                      className="text-xs bg-[var(--bg-card)] hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 cursor-pointer"
+                                      title="Condonar/perdonar la deuda a este participante"
+                                    >
+                                      Perdonar
+                                    </button>
+                                  </>
+                                )}
+
+                                {!isDebtor && !isCreditor && isOwner && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'PAYMENT')}
+                                      className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
+                                    >
+                                      Registrar Pago
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openSettleModal(t.from_id || '', t.to_id || '', t.amount, 'FORGIVEN')}
+                                      className="text-xs bg-[var(--bg-card)] hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1 cursor-pointer"
+                                      title="Perdonar deuda en nombre del acreedor"
+                                    >
+                                      Perdonar (Acreedor)
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* HISTORIAL DE DEUDAS CANCELADAS Y CONDONADAS */}
+            {/* HISTORIAL DE DEUDAS CANCELADAS Y CONDONADAS CON OPCIÓN DE ELIMINAR/REVERTIR */}
             {settlementRecords.filter(s => s.status === 'CONFIRMED').length > 0 && (
-              <div className="p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2.5">Deudas canceladas / Pagos confirmados</h3>
-                <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+              <div className="p-5 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                      Deudas canceladas / Pagos confirmados ({settlementRecords.filter(s => s.status === 'CONFIRMED').length})
+                    </h3>
+                    <p className="text-xs text-[var(--text-muted)]">Historial de transferencias saldadas</p>
+                  </div>
+                  <button
+                    onClick={handleClearAllSettlements}
+                    className="text-xs text-red-500 hover:underline font-medium"
+                    title="Eliminar todas las liquidaciones"
+                  >
+                    Reiniciar todas
+                  </button>
+                </div>
+
+                <ul className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {settlementRecords.filter(s => s.status === 'CONFIRMED').map(st => {
                     const fromP = participants.find(p => p.id === st.from_id)?.name || 'Deudor';
                     const toP = participants.find(p => p.id === st.to_id)?.name || 'Acreedor';
                     const isForgiven = st.settlement_type === 'FORGIVEN';
                     return (
-                      <li key={st.id} className="text-xs flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
+                      <li key={st.id} className="text-xs flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
                         <div className="min-w-0 pr-2">
-                          <span className="font-medium text-[var(--text-primary)]">{fromP}</span>
+                          <span className="font-semibold text-[var(--text-primary)]">{fromP}</span>
                           <span className="text-[var(--text-muted)] mx-1">{isForgiven ? 'recibio perdon de' : 'pago a'}</span>
-                          <span className="font-medium text-[var(--text-primary)]">{toP}</span>
+                          <span className="font-semibold text-[var(--text-primary)]">{toP}</span>
                           {st.notes && <span className="text-[10px] text-[var(--text-muted)] ml-1.5 italic">({st.notes})</span>}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="font-bold text-[var(--text-primary)]">{formatOriginal(st.amount, st.currency)}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${isForgiven ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'}`}>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-bold text-[var(--text-primary)]">{formatUSD(st.amount_usd || st.amount)}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isForgiven ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'}`}>
                             {isForgiven ? 'Perdonada' : 'Pagado'}
                           </span>
+                          <button
+                            onClick={() => handleDeleteSettlement(st.id)}
+                            className="text-[var(--text-muted)] hover:text-red-500 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                            title="Eliminar este registro de liquidacion"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </li>
                     );
