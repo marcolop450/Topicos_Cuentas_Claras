@@ -1136,72 +1136,94 @@ export default function CuentaDetailPage() {
                 {expenses.map(expense => {
                   const payer = participants.find(p => p.id === expense.payer_id);
                   const isPersonal = expense.split_mode === 'PERSONAL';
+                  const expUsd = expense.amount_usd > 0 ? expense.amount_usd : toUSD(expense.amount, expense.currency || 'BOB', rates);
+                  const pct = totalUSD > 0 ? Math.min(100, (expUsd / totalUSD) * 100) : 0;
                   return (
                     <div
                       key={expense.id}
-                      className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] hover:shadow-md transition-all flex items-center justify-between gap-4"
+                      className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs hover:border-[var(--text-muted)] hover:shadow-md transition-all overflow-hidden"
                     >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-indigo-500 shrink-0">
-                          <Receipt size={18} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
-                              {expense.description}
-                            </h4>
-                            {isPersonal ? (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0">
-                                Personal
-                              </span>
-                            ) : expense.split_mode === 'PERCENTAGE' ? (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
-                                % Porcentaje
-                              </span>
-                            ) : expense.split_mode === 'CUSTOM' ? (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
-                                Monto Fijo
-                              </span>
-                            ) : null}
+                      {/* Content row */}
+                      <div className="p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-indigo-500 shrink-0">
+                            <Receipt size={18} />
                           </div>
-                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                            Pagado por <strong className="text-[var(--text-secondary)]">{payer?.name || 'Alguien'}</strong>
-                            {expense.created_at ? ` • ${new Date(expense.created_at).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}` : ''}
-                            {expense.notes && <span className="italic ml-1">({expense.notes})</span>}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Montos y acciones */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <div className="text-sm sm:text-base font-extrabold text-[var(--text-primary)]">
-                            {formatOriginal(expense.amount, expense.currency || 'BOB')}
-                          </div>
-                          {expense.currency !== 'USD' && (
-                            <div className="text-[11px] text-[var(--text-muted)] font-medium">
-                              ≈ {formatUSD(expense.amount_usd > 0 ? expense.amount_usd : toUSD(expense.amount, expense.currency || 'BOB', rates))}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                                {expense.description}
+                              </h4>
+                              {isPersonal ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0">
+                                  Personal
+                                </span>
+                              ) : expense.split_mode === 'PERCENTAGE' ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                                  % Porcentaje
+                                </span>
+                              ) : expense.split_mode === 'CUSTOM' ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
+                                  Monto Fijo
+                                </span>
+                              ) : null}
                             </div>
-                          )}
+                            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                              Pagado por <strong className="text-[var(--text-secondary)]">{payer?.name || 'Alguien'}</strong>
+                              {expense.created_at ? ` • ${new Date(expense.created_at).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}` : ''}
+                              {expense.notes && <span className="italic ml-1">({expense.notes})</span>}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1 border-l border-[var(--border)] pl-2">
-                          <button
-                            onClick={() => handleEditExpense(expense)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
-                            title="Editar gasto"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteExpense(expense.id)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                            title="Eliminar gasto"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                        {/* Montos y acciones */}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <div className="text-sm sm:text-base font-extrabold text-[var(--text-primary)]">
+                              {formatOriginal(expense.amount, expense.currency || 'BOB')}
+                            </div>
+                            {expense.currency !== 'USD' && (
+                              <div className="text-[11px] text-[var(--text-muted)] font-medium">
+                                ≈ {formatUSD(expUsd)}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 border-l border-[var(--border)] pl-2">
+                            <button
+                              onClick={() => handleEditExpense(expense)}
+                              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                              title="Editar gasto"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteExpense(expense.id)}
+                              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                              title="Eliminar gasto"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Barra de progreso: porcentaje del total */}
+                      {totalUSD > 0 && (
+                        <div className="px-4 pb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-[var(--bg-secondary)] overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-indigo-400/70 transition-all duration-500"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-[var(--text-muted)] shrink-0 w-9 text-right">
+                              {pct.toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
