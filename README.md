@@ -161,6 +161,10 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Pruba paso a paso por cada participante anterior
 
+## 2026-09-08 13:24:34
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Dentro del Modal no indica los errores y los porcentajes no indica como esta siendo divido y esto trabaja con centavos el boton de aumento,
+
 
 
 

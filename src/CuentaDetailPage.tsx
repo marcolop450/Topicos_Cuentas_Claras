@@ -109,6 +109,7 @@ export default function CuentaDetailPage() {
   const [newPartName, setNewPartName] = useState('');
   const [loading, setLoading] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const [expenseModalError, setExpenseModalError] = useState<string | null>(null);
   const [addPartError, setAddPartError] = useState<string | null>(null);
 
   const { modal, showConfirm, closeConfirm } = useConfirmModal();
@@ -226,6 +227,7 @@ export default function CuentaDetailPage() {
     setEditingExpenseId(null);
     setIsExpenseFormOpen(false);
     setFormError(null);
+    setExpenseModalError(null);
   }
 
   function handleStartAddExpense() {
@@ -236,6 +238,7 @@ export default function CuentaDetailPage() {
       if (myPart) setPayerId(myPart.id);
       else setPayerId(participants[0].id);
     }
+    setExpenseModalError(null);
     setIsExpenseFormOpen(true);
   }
 
@@ -258,24 +261,32 @@ export default function CuentaDetailPage() {
       }
     });
     setCustomShares(shares);
-    setIsExpenseFormOpen(true);
     setFormError(null);
+    setExpenseModalError(null);
+    setIsExpenseFormOpen(true);
   }
 
   async function handleSaveExpense(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setExpenseModalError(null);
     if (!description.trim()) {
-      setFormError('La descripcion es obligatoria.');
+      const msg = 'La descripción o concepto es obligatorio.';
+      setExpenseModalError(msg);
+      setFormError(msg);
       return;
     }
     const parsedAmount = parseFloat(amount);
     if (!parsedAmount || parsedAmount <= 0) {
-      setFormError('Ingresa un monto valido.');
+      const msg = 'Ingresa un monto válido mayor a 0.';
+      setExpenseModalError(msg);
+      setFormError(msg);
       return;
     }
     if (!payerId) {
-      setFormError('Selecciona quien pago.');
+      const msg = 'Selecciona quién pagó la cuenta.';
+      setExpenseModalError(msg);
+      setFormError(msg);
       return;
     }
 
@@ -284,7 +295,9 @@ export default function CuentaDetailPage() {
       activeParticipants = [payerId];
     } else {
       if (activeParticipants.length === 0) {
-        setFormError('Selecciona al menos un participante.');
+        const msg = 'Selecciona al menos un participante para dividir el gasto.';
+        setExpenseModalError(msg);
+        setFormError(msg);
         return;
       }
     }
@@ -295,7 +308,10 @@ export default function CuentaDetailPage() {
         0
       );
       if (Math.abs(sumPct - 100) > 0.1) {
-        setFormError(`La suma de los porcentajes debe ser exactamente 100% (actual: ${sumPct.toFixed(1)}%).`);
+        const diff = 100 - sumPct;
+        const msg = `La suma de los porcentajes debe ser exactamente 100%. Actualmente suma ${sumPct.toFixed(1)}% (${diff > 0 ? `faltan ${diff.toFixed(1)}%` : `excede por +${Math.abs(diff).toFixed(1)}%`}).`;
+        setExpenseModalError(msg);
+        setFormError(msg);
         return;
       }
     }
@@ -306,9 +322,10 @@ export default function CuentaDetailPage() {
         0
       );
       if (Math.abs(sumCustom - parsedAmount) > 0.05) {
-        setFormError(
-          `La suma de los montos debe ser igual al total ${parsedAmount.toFixed(2)} ${currency} (actual: ${sumCustom.toFixed(2)}).`
-        );
+        const diff = parsedAmount - sumCustom;
+        const msg = `La suma de los montos individuales (${sumCustom.toFixed(2)} ${currency}) debe ser igual al total del gasto (${parsedAmount.toFixed(2)} ${currency}). ${diff > 0 ? `Faltan ${diff.toFixed(2)} ${currency}` : `Excede por +${Math.abs(diff).toFixed(2)} ${currency}`}.`;
+        setExpenseModalError(msg);
+        setFormError(msg);
         return;
       }
     }
@@ -413,7 +430,9 @@ export default function CuentaDetailPage() {
 
       resetExpenseForm();
     } catch (err: any) {
-      setFormError('Error al guardar gasto: ' + (err.message || err));
+      const msg = 'Error al guardar gasto: ' + (err.message || err);
+      setExpenseModalError(msg);
+      setFormError(msg);
     }
   }
 
@@ -1651,6 +1670,8 @@ export default function CuentaDetailPage() {
               </div>
 
               <form onSubmit={handleSaveExpense} className="space-y-4">
+                {expenseModalError && <FormError message={expenseModalError} />}
+
                 {/* BLOQUE 1: MONTO Y MONEDA */}
                 <div>
                   <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
@@ -1660,7 +1681,7 @@ export default function CuentaDetailPage() {
                     <div className="col-span-2 relative">
                       <input
                         type="number"
-                        step="0.01"
+                        step="any"
                         value={amount}
                         onChange={e => setAmount(e.target.value)}
                         placeholder="0.00"
@@ -1769,98 +1790,262 @@ export default function CuentaDetailPage() {
                 </div>
 
                 {/* BLOQUE 5: SELECCION DE PARTICIPANTES O VALORES */}
-                {splitMode !== 'PERSONAL' && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-bold text-[var(--text-secondary)]">
-                        Participantes incluidos ({selectedParticipants.length}/{participants.length})
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (allSelected) setSelectedParticipants([]);
-                          else setSelectedParticipants(participants.map(p => p.id));
-                        }}
-                        className="text-xs text-indigo-500 hover:underline font-semibold"
-                      >
-                        {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                      </button>
-                    </div>
+                {splitMode !== 'PERSONAL' && (() => {
+                  const parsedAmt = parseFloat(amount) || 0;
+                  const sumPct = selectedParticipants.reduce(
+                    (acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0),
+                    0
+                  );
+                  const sumCustom = selectedParticipants.reduce(
+                    (acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0),
+                    0
+                  );
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                      {participants.map(p => {
-                        const isSelected = selectedParticipants.includes(p.id);
-                        return (
-                          <div
-                            key={p.id}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
-                              isSelected
-                                ? 'bg-[var(--bg-secondary)] border-indigo-500/40'
-                                : 'bg-[var(--bg-primary)] border-[var(--border)] opacity-60'
-                            }`}
-                          >
-                            <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={e => {
-                                  if (e.target.checked) {
-                                    setSelectedParticipants([...selectedParticipants, p.id]);
-                                  } else {
-                                    setSelectedParticipants(selectedParticipants.filter(id => id !== p.id));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <div
-                                className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarColor(
-                                  p.name
-                                )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
-                              >
-                                {getInitials(p.name)}
-                              </div>
-                              <span className="text-xs font-medium text-[var(--text-primary)] truncate">
-                                {p.name} {p.id === payerId ? '(Pagador)' : ''}
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-[var(--text-secondary)]">
+                          Participantes incluidos ({selectedParticipants.length}/{participants.length})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (allSelected) setSelectedParticipants([]);
+                            else setSelectedParticipants(participants.map(p => p.id));
+                          }}
+                          className="text-xs text-indigo-500 hover:underline font-semibold"
+                        >
+                          {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                        </button>
+                      </div>
+
+                      {/* BANNER DINÁMICO EN MODO EQUITATIVO */}
+                      {splitMode === 'EQUAL' && selectedParticipants.length > 0 && parsedAmt > 0 && (
+                        <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-3 flex items-center justify-between text-xs">
+                          <span className="text-[var(--text-secondary)] font-medium">Cada uno paga equitativamente:</span>
+                          <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">
+                            {formatOriginal(parsedAmt / selectedParticipants.length, currency)}
+                            {currency !== 'USD' && (
+                              <span className="text-[10px] text-[var(--text-muted)] font-normal ml-1">
+                                (≈ {formatUSD(toUSD(parsedAmt / selectedParticipants.length, currency, rates))})
                               </span>
-                            </label>
-
-                            {isSelected && splitMode === 'PERCENTAGE' && (
-                              <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  value={customShares[p.id] || ''}
-                                  onChange={e =>
-                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
-                                  }
-                                  placeholder="%"
-                                  className="w-16 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
-                                />
-                                <span className="text-xs text-[var(--text-muted)]">%</span>
-                              </div>
                             )}
+                          </span>
+                        </div>
+                      )}
 
-                            {isSelected && splitMode === 'CUSTOM' && (
-                              <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={customShares[p.id] || ''}
-                                  onChange={e =>
-                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
-                                  }
-                                  placeholder="0.00"
-                                  className="w-20 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
-                                />
-                                <span className="text-[11px] text-[var(--text-muted)] font-mono">{currency}</span>
-                              </div>
-                            )}
+                      {/* BANNER DINÁMICO EN MODO PORCENTAJE */}
+                      {splitMode === 'PERCENTAGE' && selectedParticipants.length > 0 && (
+                        <div
+                          className={`p-3 rounded-xl border mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs ${
+                            Math.abs(sumPct - 100) < 0.1
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                              : sumPct > 100
+                              ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'
+                              : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">Suma de Porcentajes:</span>
+                              <span className="font-black text-sm">{sumPct.toFixed(1)}% / 100%</span>
+                              {Math.abs(sumPct - 100) < 0.1 ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                                  Completo (100%)
+                                </span>
+                              ) : sumPct > 100 ? (
+                                <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                                  Excede por +{(sumPct - 100).toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold">
+                                  Falta {(100 - sumPct).toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              {parsedAmt > 0
+                                ? `Distribuido: ${formatOriginal((parsedAmt * sumPct) / 100, currency)} de ${formatOriginal(parsedAmt, currency)}`
+                                : 'Ingresa el porcentaje (%) que le corresponde a cada miembro.'}
+                            </p>
                           </div>
-                        );
-                      })}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedParticipants.length === 0) return;
+                              const count = selectedParticipants.length;
+                              const basePct = Math.floor((100 / count) * 10) / 10;
+                              const remainder = Math.round((100 - basePct * count) * 10) / 10;
+                              const newShares: Record<string, string> = {};
+                              selectedParticipants.forEach((pId, idx) => {
+                                const val = idx === 0 ? (basePct + remainder).toFixed(1) : basePct.toFixed(1);
+                                newShares[pId] = val;
+                              });
+                              setCustomShares(newShares);
+                              setExpenseModalError(null);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[11px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-indigo-500 transition-all shadow-xs btn-press shrink-0 self-start sm:self-auto"
+                          >
+                            Repartir 100% equitativo
+                          </button>
+                        </div>
+                      )}
+
+                      {/* BANNER DINÁMICO EN MODO MONTO FIJO */}
+                      {splitMode === 'CUSTOM' && selectedParticipants.length > 0 && (
+                        <div
+                          className={`p-3 rounded-xl border mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs ${
+                            Math.abs(sumCustom - parsedAmt) < 0.02
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                              : sumCustom > parsedAmt
+                              ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'
+                              : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">Total Asignado:</span>
+                              <span className="font-black text-sm">
+                                {sumCustom.toFixed(2)} / {parsedAmt.toFixed(2)} {currency}
+                              </span>
+                              {Math.abs(sumCustom - parsedAmt) < 0.02 ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                                  Cubierto Exacto
+                                </span>
+                              ) : sumCustom > parsedAmt ? (
+                                <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                                  Excede por +{(sumCustom - parsedAmt).toFixed(2)} {currency}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold">
+                                  Faltan {(parsedAmt - sumCustom).toFixed(2)} {currency}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              Asigna el monto exacto asignado a cada participante.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedParticipants.length === 0 || parsedAmt <= 0) return;
+                              const count = selectedParticipants.length;
+                              const baseVal = Math.floor((parsedAmt / count) * 100) / 100;
+                              const remainder = Math.round((parsedAmt - baseVal * count) * 100) / 100;
+                              const newShares: Record<string, string> = {};
+                              selectedParticipants.forEach((pId, idx) => {
+                                const val = idx === 0 ? (baseVal + remainder).toFixed(2) : baseVal.toFixed(2);
+                                newShares[pId] = val;
+                              });
+                              setCustomShares(newShares);
+                              setExpenseModalError(null);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[11px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-indigo-500 transition-all shadow-xs btn-press shrink-0 self-start sm:self-auto"
+                          >
+                            Distribuir saldo exacto
+                          </button>
+                        </div>
+                      )}
+
+                      {/* LISTADO DE PARTICIPANTES CON INPUTS Y EQUIVALENCIAS EN VIVO */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                        {participants.map(p => {
+                          const isSelected = selectedParticipants.includes(p.id);
+                          const pctVal = parseFloat(customShares[p.id] || '0') || 0;
+                          const equivMoney = parsedAmt > 0 ? (parsedAmt * pctVal) / 100 : 0;
+                          const customVal = parseFloat(customShares[p.id] || '0') || 0;
+                          const equivPct = parsedAmt > 0 ? (customVal / parsedAmt) * 100 : 0;
+
+                          return (
+                            <div
+                              key={p.id}
+                              className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                                isSelected
+                                  ? 'bg-[var(--bg-secondary)] border-indigo-500/40'
+                                  : 'bg-[var(--bg-primary)] border-[var(--border)] opacity-60'
+                              }`}
+                            >
+                              <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setSelectedParticipants([...selectedParticipants, p.id]);
+                                    } else {
+                                      setSelectedParticipants(selectedParticipants.filter(id => id !== p.id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div
+                                  className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                                    p.name
+                                  )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                                >
+                                  {getInitials(p.name)}
+                                </div>
+                                <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                                  {p.name} {p.id === payerId ? '(Pagador)' : ''}
+                                </span>
+                              </label>
+
+                              {isSelected && splitMode === 'PERCENTAGE' && (
+                                <div className="flex flex-col items-end shrink-0 ml-2">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={customShares[p.id] || ''}
+                                      onChange={e => {
+                                        setCustomShares({ ...customShares, [p.id]: e.target.value });
+                                        if (expenseModalError) setExpenseModalError(null);
+                                      }}
+                                      placeholder="0"
+                                      className="w-16 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                    <span className="text-xs font-bold text-[var(--text-muted)]">%</span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                    ≈ {formatOriginal(equivMoney, currency)}
+                                  </span>
+                                </div>
+                              )}
+
+                              {isSelected && splitMode === 'CUSTOM' && (
+                                <div className="flex flex-col items-end shrink-0 ml-2">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={customShares[p.id] || ''}
+                                      onChange={e => {
+                                        setCustomShares({ ...customShares, [p.id]: e.target.value });
+                                        if (expenseModalError) setExpenseModalError(null);
+                                      }}
+                                      placeholder="0.00"
+                                      className="w-20 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                    <span className="text-[11px] font-mono text-[var(--text-muted)]">{currency}</span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                    ≈ {equivPct.toFixed(1)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
+
+                {/* MENSAJE DE ERROR DENTRO DEL MODAL */}
+                {expenseModalError && <FormError message={expenseModalError} />}
 
                 {/* BOTONES DE ACCION */}
                 <div className="flex justify-end gap-2.5 pt-3 border-t border-[var(--border)]">
