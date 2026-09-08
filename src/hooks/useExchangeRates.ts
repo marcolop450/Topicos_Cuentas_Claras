@@ -133,20 +133,23 @@ export function toUSD(amount: number, currency: string, rates: RatesMap): number
 }
 
 /**
- * Formatea un monto en su moneda original de forma legible.
- * Ej: formatOriginal(800, 'BOB') => 'Bs. 800.00'
+ * Formatea un monto en su moneda original de forma legible con separador de miles.
+ * Ej: formatOriginal(1800, 'BOB') => 'Bs. 1,800.00'
  */
 export function formatOriginal(amount: number, currency: string): string {
   const symbol = CURRENCY_SYMBOLS[currency as CurrencyCode] ?? currency;
   // Monedas de gran denominación: sin decimales
   const noDecimals = ['ARS', 'CLP', 'COP'].includes(currency);
-  return `${symbol} ${noDecimals ? Math.round(amount).toLocaleString() : amount.toFixed(2)}`;
+  if (noDecimals) {
+    return `${symbol} ${Math.round(amount).toLocaleString('en-US')}`;
+  }
+  return `${symbol} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /**
- * Formatea un monto en USD.
- * Ej: formatUSD(114.94) => '$ 114.94'
+ * Formatea un monto en USD con separador de miles.
+ * Ej: formatUSD(1114.94) => '$ 1,114.94'
  */
 export function formatUSD(amount: number): string {
-  return `$ ${amount.toFixed(2)}`;
+  return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
