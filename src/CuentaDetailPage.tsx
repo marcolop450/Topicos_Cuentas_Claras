@@ -881,7 +881,18 @@ export default function CuentaDetailPage() {
 
         {/* HEADER DE LA SALA */}
         <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 mb-6 shadow-xs relative overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Subtle dot pattern background & ambient glow */}
+          <div
+            className="absolute inset-0 opacity-[0.035] dark:opacity-[0.07] pointer-events-none text-[var(--text-primary)]"
+            style={{
+              backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)',
+              backgroundSize: '16px 16px',
+            }}
+          />
+          <div className="absolute -top-12 -right-12 w-48 h-48 bg-indigo-500/10 dark:bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-500/10 dark:bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div
                 className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${getAvatarColor(
