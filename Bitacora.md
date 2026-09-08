@@ -85,3 +85,15 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.1 Pro (High)
 **Mensaje**: Vale seguimos con errores > temp-app@0.0.0 build ...
 
+
+## 2026-09-01 20:13:33
+**Modelo**: Claude Sonnet 4.6 (Thinking)
+**Mensaje**: Tenemos los siguientes ajustes Trabajar con MultiMoneda Todo al final se consolida en Dolares Quiero que primero armemos un plan de como se podria hacer, comencemos con el primer ajuste
+
+## 2026-09-07 20:26:16
+**Modelo**: Claude Sonnet 4.6 (Thinking)
+**Mensaje**: Vamos a implementar el plan toma en cuenta los comentarios, pero con el tema de la base de datos haremos esto: Opcion 3: Pasar el script SQL a tu companero. Si no quieres crear una cuenta nueva y tu companero prefiere no compartir el acceso: Disenyas el cambio que necesitas (por ejemplo: ALTER TABLE expenses ADD COLUMN notes TEXT;). Se lo pasas a tu companero para que lo pegue y ejecute en su SQL Editor de Supabase. Actualizan el archivo supabase.sql en el repositorio para que ambos tengan el esquema actualizado en Git.
+
+## 2026-09-08 09:35:14
+**Modelo**: Claude Sonnet 4.6 (Thinking)
+**Mensaje**: hice un prueba de un gasto de 20 BOB lo tomo como 2.87 Dolares, cosa que no concuerda y es incorrecto, revisa analiza y corrige

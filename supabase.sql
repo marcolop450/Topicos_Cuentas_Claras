@@ -1,6 +1,7 @@
 -- ============================================================
--- CUENTAS CLARAS - Script Completo BD v2 con Autenticación
+-- CUENTAS CLARAS - Script Completo BD v3 con Autenticación y MultiMoneda
 -- Ejecuta esto en el SQL Editor de Supabase
+-- Para BD existente: usar migration_multicurrency.sql en su lugar
 -- ============================================================
 
 -- 1. Limpiar BD anterior
@@ -33,12 +34,14 @@ CREATE TABLE participants (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
--- 5. Tabla de gastos
+-- 5. Tabla de gastos (v3: MultiMoneda)
 CREATE TABLE expenses (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   group_id    UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
   description TEXT NOT NULL,
   amount      NUMERIC(10, 2) NOT NULL,
+  currency    VARCHAR(3) NOT NULL DEFAULT 'BOB',  -- Código ISO 4217
+  amount_usd  NUMERIC(12, 4) NOT NULL DEFAULT 0,  -- Snapshot en USD al momento de guardar
   payer_id    UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
