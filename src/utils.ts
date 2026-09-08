@@ -11,6 +11,8 @@ export type Participant = {
   name: string;
 };
 
+export type SplitMode = 'EQUAL' | 'PERCENTAGE' | 'CUSTOM' | 'PERSONAL';
+
 export type Expense = {
   id: string;
   group_id: string;
@@ -19,12 +21,14 @@ export type Expense = {
   currency: string;     // Código ISO 4217 (ej: 'BOB', 'USD', 'EUR')
   amount_usd: number;   // Monto convertido a USD (snapshot al guardar)
   payer_id: string;
+  split_mode?: SplitMode;
 };
 
 export type ExpenseSplit = {
   id: string;
   expense_id: string;
   participant_id: string;
+  share_value?: number | null; // % o monto asignado según split_mode
 };
 
 export type Balance = {
@@ -40,64 +44,162 @@ export type Transfer = {
 };
 
 /**
+ * Hash determinista para desempate pseudoaleatorio consistente.
+ */
+function getHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Distribuye los centavos de residuo de forma justa:
+ * 1. Solo participan los involucrados en este gasto.
+ * 2. Si tienen deudas distintas, se le da al que más debe (balance más negativo).
+ * 3. Si están empatados, se desempata con sorteo determinista (hash de gasto + participante).
+ */
+function distributeRemainderCents(
+  involvedSplits: ExpenseSplit[],
+  balancesMapCents: Record<string, number>,
+  remainderCents: number,
+  expenseId: string
+): Set<string> {
+  if (remainderCents <= 0 || involvedSplits.length === 0) return new Set();
+
+  const sorted = [...involvedSplits].sort((a, b) => {
+    const balA = balancesMapCents[a.participant_id] ?? 0;
+    const balB = balancesMapCents[b.participant_id] ?? 0;
+    if (balA !== balB) {
+      return balA - balB; // Menor balance (más deuda) primero
+    }
+    // Desempate pseudoaleatorio determinista
+    return getHash(`${expenseId}_${a.participant_id}`) - getHash(`${expenseId}_${b.participant_id}`);
+  });
+
+  const chosen = new Set<string>();
+  for (let i = 0; i < remainderCents && i < sorted.length; i++) {
+    chosen.add(sorted[i].participant_id);
+  }
+  return chosen;
+}
+
+/**
  * Calcula el balance de cada participante en USD.
  *
- * Usa expense.amount_usd para todos los cálculos, garantizando
- * que la suma de todos los balances sea exactamente 0.00 (en centavos).
- *
- * Para gastos legacy sin amount_usd (amount_usd === 0), usa
- * expense.amount directamente (asumiendo que ya está en USD o BOB≈USD
- * para no romper datos históricos).
+ * Usa expense.amount_usd para todos los cálculos en centavos enteros,
+ * garantizando que la suma de todos los balances sea exactamente 0.00.
  */
 export function calculateBalances(
   participants: Participant[],
   expenses: Expense[],
   splits: ExpenseSplit[]
 ): Balance[] {
-  // Inicializar balances a 0 (en centavos de USD)
-  const balancesMap: Record<string, number> = {};
+  // Balances en centavos enteros de USD
+  const balancesMapCents: Record<string, number> = {};
   participants.forEach(p => {
-    balancesMap[p.id] = 0;
+    balancesMapCents[p.id] = 0;
   });
 
   expenses.forEach(expense => {
-    // Usar amount_usd si está disponible; si es 0, usar amount como fallback
     const usdAmount = expense.amount_usd > 0 ? expense.amount_usd : expense.amount;
+    const totalCents = Math.round(usdAmount * 100);
+    const mode = expense.split_mode || 'EQUAL';
 
     // El pagador recibe crédito por el monto total en USD
-    if (balancesMap[expense.payer_id] !== undefined) {
-      balancesMap[expense.payer_id] += usdAmount;
+    if (balancesMapCents[expense.payer_id] !== undefined) {
+      balancesMapCents[expense.payer_id] += totalCents;
     }
 
-    // Encontrar quién participa en este gasto
+    // 1. GASTO PERSONAL (por su cuenta)
+    if (mode === 'PERSONAL') {
+      // El pagador asume el 100% del gasto; impacto neto en deudas = 0
+      if (balancesMapCents[expense.payer_id] !== undefined) {
+        balancesMapCents[expense.payer_id] -= totalCents;
+      }
+      return;
+    }
+
     const involvedSplits = splits.filter(s => s.expense_id === expense.id);
     const involvedCount = involvedSplits.length;
 
-    if (involvedCount > 0) {
-      // Trabajar en centavos para evitar problemas de redondeo con decimales infinitos
-      const totalCents = Math.round(usdAmount * 100);
-      const splitCents = Math.floor(totalCents / involvedCount);
-      let remainderCents = totalCents - splitCents * involvedCount;
+    if (involvedCount === 0) {
+      // Si por alguna razón no hay splits, se le asigna al pagador
+      if (balancesMapCents[expense.payer_id] !== undefined) {
+        balancesMapCents[expense.payer_id] -= totalCents;
+      }
+      return;
+    }
+
+    // 2. DIVISIÓN POR PORCENTAJE (%)
+    if (mode === 'PERCENTAGE') {
+      const baseShares: { split: ExpenseSplit; cents: number }[] = [];
+      let totalAllocatedCents = 0;
 
       involvedSplits.forEach(split => {
-        if (balancesMap[split.participant_id] !== undefined) {
-          let shareCents = splitCents;
-          // Distribuir centavos sobrantes uno a uno entre los primeros participantes
-          if (remainderCents > 0) {
-            shareCents += 1;
-            remainderCents -= 1;
-          }
-          balancesMap[split.participant_id] -= shareCents / 100;
+        const pct = split.share_value != null ? Number(split.share_value) : (100 / involvedCount);
+        const cents = Math.floor((totalCents * pct) / 100);
+        baseShares.push({ split, cents });
+        totalAllocatedCents += cents;
+      });
+
+      const remainderCents = totalCents - totalAllocatedCents;
+      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+
+      baseShares.forEach(({ split, cents }) => {
+        if (balancesMapCents[split.participant_id] !== undefined) {
+          const finalCents = cents + (extraCentWinners.has(split.participant_id) ? 1 : 0);
+          balancesMapCents[split.participant_id] -= finalCents;
         }
       });
+      return;
     }
+
+    // 3. DIVISIÓN POR MONTO PERSONALIZADO (CUSTOM)
+    if (mode === 'CUSTOM') {
+      const totalCustom = involvedSplits.reduce((acc, s) => acc + (Number(s.share_value) || 0), 0);
+      const baseShares: { split: ExpenseSplit; cents: number }[] = [];
+      let totalAllocatedCents = 0;
+
+      involvedSplits.forEach(split => {
+        const val = Number(split.share_value) || 0;
+        const ratio = totalCustom > 0 ? val / totalCustom : 1 / involvedCount;
+        const cents = Math.floor(totalCents * ratio);
+        baseShares.push({ split, cents });
+        totalAllocatedCents += cents;
+      });
+
+      const remainderCents = totalCents - totalAllocatedCents;
+      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+
+      baseShares.forEach(({ split, cents }) => {
+        if (balancesMapCents[split.participant_id] !== undefined) {
+          const finalCents = cents + (extraCentWinners.has(split.participant_id) ? 1 : 0);
+          balancesMapCents[split.participant_id] -= finalCents;
+        }
+      });
+      return;
+    }
+
+    // 4. DIVISIÓN EN PARTES IGUALES (EQUAL - Default)
+    const splitCents = Math.floor(totalCents / involvedCount);
+    const remainderCents = totalCents - (splitCents * involvedCount);
+    const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+
+    involvedSplits.forEach(split => {
+      if (balancesMapCents[split.participant_id] !== undefined) {
+        const finalCents = splitCents + (extraCentWinners.has(split.participant_id) ? 1 : 0);
+        balancesMapCents[split.participant_id] -= finalCents;
+      }
+    });
   });
 
-  // Convertir a array y redondear a 2 decimales para limpiar artefactos de float
   return participants.map(p => ({
     participantId: p.id,
     name: p.name,
-    balance: Math.round(balancesMap[p.id] * 100) / 100,
+    balance: (balancesMapCents[p.id] ?? 0) / 100,
   }));
 }
 

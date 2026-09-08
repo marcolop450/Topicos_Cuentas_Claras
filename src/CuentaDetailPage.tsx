@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { calculateBalances, calculateSettlement } from './utils';
-import type { Group, Participant, Expense, ExpenseSplit } from './utils';
+import type { Group, Participant, Expense, ExpenseSplit, SplitMode } from './utils';
 import { Trash2, Edit2, Users, Receipt, Calculator, AlertCircle, FolderOpen, ArrowRight, MessageCircle, RefreshCw } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 import { useAuth } from './hooks/useAuth';
@@ -42,6 +42,8 @@ export default function CuentaDetailPage() {
   const [currency, setCurrency] = useState('BOB');
   const [payerId, setPayerId] = useState('');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [splitMode, setSplitMode] = useState<SplitMode>('EQUAL');
+  const [customShares, setCustomShares] = useState<Record<string, string>>({});
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -124,10 +126,35 @@ export default function CuentaDetailPage() {
     if (!description.trim()) { setFormError('La descripcion es obligatoria.'); return; }
     if (!amount || parseFloat(amount) <= 0) { setFormError('Ingresa un monto valido.'); return; }
     if (!payerId) { setFormError('Selecciona quien pago.'); return; }
-    if (selectedParticipants.length === 0) { setFormError('Selecciona al menos un participante.'); return; }
 
     const parsedAmount = parseFloat(amount);
     const computedAmountUsd = toUSD(parsedAmount, currency, rates);
+
+    let activeParticipants = selectedParticipants;
+    if (splitMode === 'PERSONAL') {
+      activeParticipants = [payerId];
+    } else {
+      if (activeParticipants.length === 0) {
+        setFormError('Selecciona al menos un participante.');
+        return;
+      }
+    }
+
+    if (splitMode === 'PERCENTAGE') {
+      const sumPct = activeParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+      if (Math.abs(sumPct - 100) > 0.1) {
+        setFormError(`La suma de los porcentajes debe ser 100% (actual: ${sumPct.toFixed(1)}%).`);
+        return;
+      }
+    }
+
+    if (splitMode === 'CUSTOM') {
+      const sumCustom = activeParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+      if (Math.abs(sumCustom - parsedAmount) > 0.05) {
+        setFormError(`La suma de los montos debe ser igual al total ${parsedAmount.toFixed(2)} ${currency} (actual: ${sumCustom.toFixed(2)}).`);
+        return;
+      }
+    }
 
     try {
       if (editingExpenseId) {
@@ -137,15 +164,27 @@ export default function CuentaDetailPage() {
           currency,
           amount_usd: computedAmountUsd,
           payer_id: payerId,
+          split_mode: splitMode,
         }).eq('id', editingExpenseId);
+
         await supabase.from('expense_splits').delete().eq('expense_id', editingExpenseId);
+
+        const splitsPayload = activeParticipants.map(pId => ({
+          expense_id: editingExpenseId,
+          participant_id: pId,
+          share_value: (splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM')
+            ? parseFloat(customShares[pId] || '0')
+            : null,
+        }));
+
         const { data: splData } = await supabase
           .from('expense_splits')
-          .insert(selectedParticipants.map(pId => ({ expense_id: editingExpenseId, participant_id: pId })))
+          .insert(splitsPayload)
           .select();
+
         setExpenses(expenses.map(exp =>
           exp.id === editingExpenseId
-            ? { ...exp, description: description.trim(), amount: parsedAmount, currency, amount_usd: computedAmountUsd, payer_id: payerId }
+            ? { ...exp, description: description.trim(), amount: parsedAmount, currency, amount_usd: computedAmountUsd, payer_id: payerId, split_mode: splitMode }
             : exp
         ));
         setSplits([...splits.filter(s => s.expense_id !== editingExpenseId), ...(splData || [])]);
@@ -160,19 +199,33 @@ export default function CuentaDetailPage() {
             currency,
             amount_usd: computedAmountUsd,
             payer_id: payerId,
+            split_mode: splitMode,
           }])
           .select();
+
         const newExp = expData![0];
+
+        const splitsPayload = activeParticipants.map(pId => ({
+          expense_id: newExp.id,
+          participant_id: pId,
+          share_value: (splitMode === 'PERCENTAGE' || splitMode === 'CUSTOM')
+            ? parseFloat(customShares[pId] || '0')
+            : null,
+        }));
+
         const { data: splData } = await supabase
           .from('expense_splits')
-          .insert(selectedParticipants.map(pId => ({ expense_id: newExp.id, participant_id: pId })))
+          .insert(splitsPayload)
           .select();
+
         setExpenses([newExp, ...expenses]);
         setSplits([...splits, ...(splData || [])]);
       }
       setDescription('');
       setAmount('');
       setCurrency('BOB');
+      setSplitMode('EQUAL');
+      setCustomShares({});
     } catch { setFormError('Error guardando gasto.'); }
   }
 
@@ -183,7 +236,19 @@ export default function CuentaDetailPage() {
     setAmount(exp.amount.toString());
     setCurrency(exp.currency || 'BOB');
     setPayerId(exp.payer_id);
-    setSelectedParticipants(splits.filter(s => s.expense_id === exp.id).map(s => s.participant_id));
+    const mode = exp.split_mode || 'EQUAL';
+    setSplitMode(mode);
+
+    const expSplits = splits.filter(s => s.expense_id === exp.id);
+    setSelectedParticipants(expSplits.map(s => s.participant_id));
+
+    const shares: Record<string, string> = {};
+    expSplits.forEach(s => {
+      if (s.share_value != null) {
+        shares[s.participant_id] = s.share_value.toString();
+      }
+    });
+    setCustomShares(shares);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -193,6 +258,8 @@ export default function CuentaDetailPage() {
     setDescription('');
     setAmount('');
     setCurrency('BOB');
+    setSplitMode('EQUAL');
+    setCustomShares({});
   }
 
   function handleDeleteExpense(expenseId: string) {
@@ -408,31 +475,199 @@ export default function CuentaDetailPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Quien pago</label>
-                  <select value={payerId} onChange={e => setPayerId(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors">
+                  <select
+                    value={payerId}
+                    onChange={e => {
+                      const newPayer = e.target.value;
+                      setPayerId(newPayer);
+                      if (splitMode === 'PERSONAL' && newPayer) {
+                        setSelectedParticipants([newPayer]);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+                  >
                     <option value="">Selecciona...</option>
                     {participants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
+
+                {/* Selector de Modo de División */}
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-medium text-[var(--text-secondary)]">Dividir entre</label>
-                    <button type="button" onClick={() => setSelectedParticipants(allSelected ? [] : participants.map(p => p.id))} className="text-xs text-indigo-500 hover:underline font-medium">
-                      {allSelected ? 'Deseleccionar todos' : 'Todos'}
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Modo de division</label>
+                  <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)] text-xs font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('EQUAL')}
+                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'EQUAL' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                      Partes iguales
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('PERCENTAGE')}
+                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'PERCENTAGE' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                      Porcentaje (%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('CUSTOM')}
+                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'CUSTOM' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                      Monto manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitMode('PERSONAL');
+                        if (payerId) setSelectedParticipants([payerId]);
+                      }}
+                      className={`py-1.5 px-2 rounded-md transition-colors text-center truncate ${splitMode === 'PERSONAL' ? 'bg-indigo-500 text-white shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                      Por su cuenta
                     </button>
                   </div>
-                  <div className="space-y-0.5 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)]">
-                    {participants.length === 0 && <p className="text-xs text-[var(--text-muted)] text-center py-2">Agrega participantes primero</p>}
-                    {participants.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 hover:bg-[var(--bg-card)] rounded-md transition-colors">
-                        <input type="checkbox" checked={selectedParticipants.includes(p.id)} onChange={e => {
-                          if (e.target.checked) setSelectedParticipants([...selectedParticipants, p.id]);
-                          else setSelectedParticipants(selectedParticipants.filter(s => s !== p.id));
-                        }} className="rounded text-indigo-500 focus:ring-indigo-500 w-3.5 h-3.5" />
-                        <span className="text-[var(--text-primary)] truncate">{p.name}</span>
-                      </label>
-                    ))}
-                  </div>
                 </div>
+
+                {splitMode === 'PERSONAL' ? (
+                  <div className="p-3 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-lg text-xs">
+                    <p className="font-semibold text-indigo-700 dark:text-indigo-300 mb-0.5">Gasto personal (por su cuenta)</p>
+                    <p className="text-[var(--text-secondary)]">
+                      {payerId
+                        ? `Asignado al 100% a ${participants.find(p => p.id === payerId)?.name || 'quien pago'}. Suma al total del viaje, pero no genera deudas con el grupo.`
+                        : 'Selecciona arriba quien pago para asociar este gasto personal.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                        {splitMode === 'PERCENTAGE' ? 'Asignar porcentajes' : splitMode === 'CUSTOM' ? `Asignar montos (${currency})` : 'Dividir entre'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {splitMode === 'PERCENTAGE' && selectedParticipants.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const equalPct = (100 / selectedParticipants.length).toFixed(1);
+                              const newShares: Record<string, string> = { ...customShares };
+                              selectedParticipants.forEach(pId => { newShares[pId] = equalPct; });
+                              setCustomShares(newShares);
+                            }}
+                            className="text-xs text-indigo-500 hover:underline font-medium"
+                          >
+                            Repartir parejo
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (allSelected) {
+                              setSelectedParticipants([]);
+                            } else {
+                              setSelectedParticipants(participants.map(p => p.id));
+                            }
+                          }}
+                          className="text-xs text-indigo-500 hover:underline font-medium"
+                        >
+                          {allSelected ? 'Deseleccionar todos' : 'Todos'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 max-h-48 overflow-y-auto p-2 border border-[var(--border)] rounded-lg bg-[var(--bg-secondary)]">
+                      {participants.length === 0 && <p className="text-xs text-[var(--text-muted)] text-center py-2">Agrega participantes primero</p>}
+                      {participants.map(p => {
+                        const isSelected = selectedParticipants.includes(p.id);
+                        return (
+                          <div key={p.id} className="flex items-center justify-between gap-2 p-1.5 hover:bg-[var(--bg-card)] rounded-md transition-colors">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedParticipants([...selectedParticipants, p.id]);
+                                  } else {
+                                    setSelectedParticipants(selectedParticipants.filter(s => s !== p.id));
+                                  }
+                                }}
+                                className="rounded text-indigo-500 focus:ring-indigo-500 w-3.5 h-3.5"
+                              />
+                              <span className="text-[var(--text-primary)] truncate text-xs sm:text-sm">{p.name}</span>
+                            </label>
+
+                            {/* Input inline para PERCENTAGE */}
+                            {splitMode === 'PERCENTAGE' && isSelected && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  max="100"
+                                  placeholder="0"
+                                  value={customShares[p.id] || ''}
+                                  onChange={e => setCustomShares({ ...customShares, [p.id]: e.target.value })}
+                                  className="w-16 px-1.5 py-1 text-xs border border-[var(--border)] rounded bg-[var(--bg-primary)] text-[var(--text-primary)] text-right outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <span className="text-xs text-[var(--text-muted)]">%</span>
+                              </div>
+                            )}
+
+                            {/* Input inline para CUSTOM */}
+                            {splitMode === 'CUSTOM' && isSelected && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={customShares[p.id] || ''}
+                                  onChange={e => setCustomShares({ ...customShares, [p.id]: e.target.value })}
+                                  className="w-20 px-1.5 py-1 text-xs border border-[var(--border)] rounded bg-[var(--bg-primary)] text-[var(--text-primary)] text-right outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <span className="text-[10px] text-[var(--text-muted)]">{currency}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Resumen de validación para porcentaje */}
+                    {splitMode === 'PERCENTAGE' && selectedParticipants.length > 0 && (
+                      <div className="flex justify-between items-center text-xs mt-1 px-1">
+                        <span className="text-[var(--text-muted)]">Total asignado:</span>
+                        {(() => {
+                          const sumPct = selectedParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+                          const isOk = Math.abs(sumPct - 100) <= 0.1;
+                          return (
+                            <span className={`font-semibold ${isOk ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {sumPct.toFixed(1)}% / 100%
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Resumen de validación para custom amount */}
+                    {splitMode === 'CUSTOM' && selectedParticipants.length > 0 && (
+                      <div className="flex justify-between items-center text-xs mt-1 px-1">
+                        <span className="text-[var(--text-muted)]">Total asignado:</span>
+                        {(() => {
+                          const sumCustom = selectedParticipants.reduce((acc, pId) => acc + (parseFloat(customShares[pId] || '0') || 0), 0);
+                          const target = parseFloat(amount) || 0;
+                          const isOk = target > 0 && Math.abs(sumCustom - target) <= 0.05;
+                          return (
+                            <span className={`font-semibold ${isOk ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {sumCustom.toFixed(2)} / {target.toFixed(2)} {currency}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={participants.length === 0} className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-2.5 text-sm rounded-lg transition-colors disabled:opacity-40">
                     {editingExpenseId ? 'Guardar' : 'Agregar'}
@@ -457,17 +692,37 @@ export default function CuentaDetailPage() {
                     const expCurrency = exp.currency || 'BOB';
                     const expUsd = exp.amount_usd > 0 ? exp.amount_usd : toUSD(exp.amount, expCurrency, rates);
                     const showUsdConversion = expCurrency !== 'USD';
+                    const isPersonal = exp.split_mode === 'PERSONAL';
+                    const isPct = exp.split_mode === 'PERCENTAGE';
+                    const isCustom = exp.split_mode === 'CUSTOM';
                     return (
                       <div key={exp.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 rounded-lg border border-[var(--border)] hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-colors gap-2">
                         <div className="min-w-0">
-                          <p className="font-medium text-[var(--text-primary)] text-sm truncate">{exp.description}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-medium text-[var(--text-primary)] text-sm truncate">{exp.description}</p>
+                            {isPersonal && (
+                              <span className="text-[10px] bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded font-semibold">
+                                Personal
+                              </span>
+                            )}
+                            {isPct && (
+                              <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-semibold">
+                                % Porcentaje
+                              </span>
+                            )}
+                            {isCustom && (
+                              <span className="text-[10px] bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 px-1.5 py-0.5 rounded font-semibold">
+                                Manual
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
-                            {payer} pago{' '}
+                            {payer} {isPersonal ? 'pago por su cuenta' : 'pago'}{' '}
                             <span className="font-semibold text-[var(--text-primary)]">{formatOriginal(exp.amount, expCurrency)}</span>
                             {showUsdConversion && (
                               <span className="text-[var(--text-muted)]"> ({formatUSD(expUsd)})</span>
                             )}
-                            {' '}— {expSplits.length} pers.
+                            {!isPersonal && ` — ${expSplits.length} pers.`}
                           </p>
                         </div>
                         <div className="flex gap-1 self-end sm:self-center shrink-0">

@@ -110,3 +110,8 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Si, incluye los cambios e integra correctamente, y algo mas que podes hacer es acomodar la Logica del centavo perdido (Digamos 100 entre 3 es 33.33 pero a uno le daba 33.34 que era el primero en entrar, El cambio es lo siguiente si todos tienen deudas iguales selecciona al azar de los que se divide la cuenta otro caso si no son iguales el centavo se va al que debe mas de los que se divide -No podes darle el centavo extra al que debe mas pero no participo en el pago- y otro punto es dividir en porcentaje digamos o dividimos en parte iguales o alguien quiera pagar mas o menos, y otra cosa mas es que exista alguien que quiera pagar algo por su cuenta y no se toma en cuenta a deber, Investigar todo eso)
 
+
+## 2026-09-08 10:49:25
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Pregunta 1: SI. Pregunta 2: Opcion 1 (Sirve con multimoneda)
+

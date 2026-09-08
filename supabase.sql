@@ -43,6 +43,7 @@ CREATE TABLE expenses (
   currency    VARCHAR(3) NOT NULL DEFAULT 'BOB',  -- Código ISO 4217
   amount_usd  NUMERIC(12, 4) NOT NULL DEFAULT 0,  -- Snapshot en USD al momento de guardar
   payer_id    UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,
+  split_mode  VARCHAR(20) NOT NULL DEFAULT 'EQUAL', -- EQUAL, PERCENTAGE, CUSTOM, PERSONAL
   created_at  TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
@@ -50,7 +51,8 @@ CREATE TABLE expenses (
 CREATE TABLE expense_splits (
   id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   expense_id     UUID REFERENCES expenses(id) ON DELETE CASCADE NOT NULL,
-  participant_id UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL
+  participant_id UUID REFERENCES participants(id) ON DELETE CASCADE NOT NULL,
+  share_value    NUMERIC(10, 2) DEFAULT NULL -- % o monto fijo si aplica
 );
 
 -- ============================================================
