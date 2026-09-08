@@ -1876,11 +1876,18 @@ export default function CuentaDetailPage() {
                               if (selectedParticipants.length === 0) return;
                               const count = selectedParticipants.length;
                               const basePct = Math.floor((100 / count) * 10) / 10;
-                              const remainder = Math.round((100 - basePct * count) * 10) / 10;
+                              const remainderUnits = Math.round((100 - basePct * count) * 10);
+                              const sortedP = [...selectedParticipants].sort((a, b) => {
+                                const balA = balances.find(bl => bl.participantId === a)?.balance ?? 0;
+                                const balB = balances.find(bl => bl.participantId === b)?.balance ?? 0;
+                                if (balA !== balB) return balA - balB; // Más deudor primero
+                                return Math.random() - 0.5; // Desempate aleatorio justo
+                              });
+                              const winnerSet = new Set(sortedP.slice(0, remainderUnits));
                               const newShares: Record<string, string> = {};
-                              selectedParticipants.forEach((pId, idx) => {
-                                const val = idx === 0 ? (basePct + remainder).toFixed(1) : basePct.toFixed(1);
-                                newShares[pId] = val;
+                              selectedParticipants.forEach(pId => {
+                                const extra = winnerSet.has(pId) ? 0.1 : 0;
+                                newShares[pId] = (basePct + extra).toFixed(1);
                               });
                               setCustomShares(newShares);
                               setExpenseModalError(null);
@@ -1933,12 +1940,20 @@ export default function CuentaDetailPage() {
                             onClick={() => {
                               if (selectedParticipants.length === 0 || parsedAmt <= 0) return;
                               const count = selectedParticipants.length;
-                              const baseVal = Math.floor((parsedAmt / count) * 100) / 100;
-                              const remainder = Math.round((parsedAmt - baseVal * count) * 100) / 100;
+                              const totalCents = Math.round(parsedAmt * 100);
+                              const baseCents = Math.floor(totalCents / count);
+                              const remainderCents = totalCents - baseCents * count;
+                              const sortedP = [...selectedParticipants].sort((a, b) => {
+                                const balA = balances.find(bl => bl.participantId === a)?.balance ?? 0;
+                                const balB = balances.find(bl => bl.participantId === b)?.balance ?? 0;
+                                if (balA !== balB) return balA - balB; // Más deudor primero
+                                return Math.random() - 0.5; // Desempate aleatorio justo
+                              });
+                              const winnerSet = new Set(sortedP.slice(0, remainderCents));
                               const newShares: Record<string, string> = {};
-                              selectedParticipants.forEach((pId, idx) => {
-                                const val = idx === 0 ? (baseVal + remainder).toFixed(2) : baseVal.toFixed(2);
-                                newShares[pId] = val;
+                              selectedParticipants.forEach(pId => {
+                                const cents = baseCents + (winnerSet.has(pId) ? 1 : 0);
+                                newShares[pId] = (cents / 100).toFixed(2);
                               });
                               setCustomShares(newShares);
                               setExpenseModalError(null);

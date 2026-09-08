@@ -65,39 +65,46 @@ export type Transfer = {
 };
 
 /**
- * Hash determinista para desempate pseudoaleatorio consistente.
+ * Hash FNV-1a de 32 bits para desempate pseudoaleatorio uniforme y no sesgado.
  */
-function getHash(str: string): number {
-  let hash = 0;
+function fnv1a(str: string): number {
+  let hash = 2166136261;
   for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
   }
-  return Math.abs(hash);
+  return hash >>> 0;
 }
 
 /**
  * Distribuye los centavos de residuo de forma justa:
  * 1. Solo participan los involucrados en este gasto.
- * 2. Si tienen deudas distintas, se le da al que más debe (balance más negativo).
- * 3. Si están empatados, se desempata con sorteo determinista (hash de gasto + participante).
+ * 2. Si tienen deudas distintas, se le da al que más debe (balance más negativo / menor balance).
+ * 3. Si están empatados (deudas iguales), desempate pseudoaleatorio uniforme no sesgado (FNV-1a).
  */
 function distributeRemainderCents(
   involvedSplits: ExpenseSplit[],
   balancesMapCents: Record<string, number>,
   remainderCents: number,
-  expenseId: string
+  expense: Expense
 ): Set<string> {
   if (remainderCents <= 0 || involvedSplits.length === 0) return new Set();
+
+  const seed = expense.id || `${expense.description}_${expense.amount}_${expense.created_at || ''}`;
 
   const sorted = [...involvedSplits].sort((a, b) => {
     const balA = balancesMapCents[a.participant_id] ?? 0;
     const balB = balancesMapCents[b.participant_id] ?? 0;
+
+    // 1. Si las deudas son distintas, el más deudor (balance más negativo / menor) primero
     if (balA !== balB) {
-      return balA - balB; // Menor balance (más deuda) primero
+      return balA - balB;
     }
-    // Desempate pseudoaleatorio determinista
-    return getHash(`${expenseId}_${a.participant_id}`) - getHash(`${expenseId}_${b.participant_id}`);
+
+    // 2. Si las deudas son iguales, desempate pseudoaleatorio uniforme no sesgado
+    const hA = fnv1a(`${seed}_part_${a.participant_id}`);
+    const hB = fnv1a(`${seed}_part_${b.participant_id}`);
+    return hA - hB;
   });
 
   const chosen = new Set<string>();
@@ -135,7 +142,16 @@ export function calculateBalances(
     }));
   }
 
-  expenses.forEach(expense => {
+  // IMPORTANTE: Ordenar gastos cronológicamente para que las deudas previas se acumulen
+  // en el orden real de los hechos antes de calcular gastos subsecuentes.
+  const chronologicalExpenses = [...expenses].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+
+  chronologicalExpenses.forEach(expense => {
     const usdAmount = expense.amount_usd > 0 ? expense.amount_usd : expense.amount;
     const totalCents = Math.round(usdAmount * 100);
     const mode = expense.split_mode || 'EQUAL';
@@ -178,7 +194,7 @@ export function calculateBalances(
       });
 
       const remainderCents = totalCents - totalAllocatedCents;
-      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense);
 
       baseShares.forEach(({ split, cents }) => {
         if (balancesMapCents[split.participant_id] !== undefined) {
@@ -204,7 +220,7 @@ export function calculateBalances(
       });
 
       const remainderCents = totalCents - totalAllocatedCents;
-      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+      const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense);
 
       baseShares.forEach(({ split, cents }) => {
         if (balancesMapCents[split.participant_id] !== undefined) {
@@ -218,7 +234,7 @@ export function calculateBalances(
     // 4. DIVISIÓN EN PARTES IGUALES (EQUAL - Default)
     const splitCents = Math.floor(totalCents / involvedCount);
     const remainderCents = totalCents - (splitCents * involvedCount);
-    const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense.id);
+    const extraCentWinners = distributeRemainderCents(involvedSplits, balancesMapCents, remainderCents, expense);
 
     involvedSplits.forEach(split => {
       if (balancesMapCents[split.participant_id] !== undefined) {

@@ -175,6 +175,10 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Dentro del Modal no indica los errores y los porcentajes no indica como esta siendo divido y esto trabaja con centavos el boton de aumento,
 
+## 2026-09-08 13:32:44
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Parece que le sigue dando el centavo extra al Primero mas no de forma que hablamos antes (Aleatorio si deudas iguales o el centavo extra al mas deudor)
+
 
 
 
