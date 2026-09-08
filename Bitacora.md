@@ -17,7 +17,7 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 
 ## 2026-08-26 12:08:57
 **Modelo**: Gemini 3.1 Pro (High)
-**Mensaje**: Buena dame comando para Limpiar la BD, y quiero que se aumente lo siguiente: Primero un Registro (Historial) para guardar las cuentas claras, que se pueda iniciar otras cuentas para poder A�adir una cuenta nueva con nuevas Personas, No usar Emojis, y tambien que el Titulo sea mas Global que no se refiera a solo de Viajes, y Frontend Responsivo si es que falta, Si hay que modificar la BD avisas nomas que es lo nuevo, borrar o limpiar}
+**Mensaje**: Buena dame comando para Limpiar la BD, y quiero que se aumente lo siguiente: Primero un Registro (Historial) para guardar las cuentas claras, que se pueda iniciar otras cuentas para poder A�adir una cuenta nueva con nuevas Personas, No usar Emojis, y tambien que el Titulo sea mas Global que no se refiera a solo de Viajes, y Frontend Responsivo si es que falta, Si hay que modificar la BD avisas nomas que es lo nuevo, borrar o limpiar
 
 
 ## 2026-08-26 12:25:27
@@ -53,7 +53,7 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 
 ## 2026-08-27 16:32:21
 **Modelo**: Claude Sonnet 4.6 (Thinking)
-**Mensaje**: Vale, va a haber una actualizacion en la Plataforma vamos a colocar lo que es Inicio de Secion, Cerrar Secion y Registrar, Los Participantes pueden Unirse por un codigo de Sala y un aviso de que esten de acuerdo a la operacion, asi que pasa el BD Actualizada la script, Coloca seguridad, coloca tiempo de Conexion para que no este demasiado tiempo abierto, Recordar No se puede salir si debe una deuda o le deben, Solo el Due�o de la Sala puede eliminar la Sala, y en movil no se ve la basurita, Osea Usuario Crea Sala Gente se Une por un Codigo y otros no pueden ver otras salas
+**Mensaje**: Vale, va a haber una actualizacion en la Plataforma vamos a colocar lo que es Inicio de Secion, Cerrar Secion y Registrar, Los Participantes pueden Unirse por un codigo de Sala y un aviso de que esten de acuerdo a la operacion, asi que pasa el BD Actualizada la script, Coloca seguridad, coloca tiempo de Conexion para que no este demasiado tiempo abierto, Recordar No se puede salir si debe una deuda o le deben, Solo el Due�o de la Sala puede eliminar la Sala, y en movil no se ve la basurita, Osea Usuario Crea Sala Gente se Une por un Codigo y otros no pueden ver otras salas
 
 
 ## 2026-08-27 16:35:26
@@ -86,6 +86,10 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Mensaje**: Vale seguimos con errores > temp-app@0.0.0 build ...
 
 
+## 2026-09-01 18:57:41
+**Modelo**: Gemini 3.1 Pro (High)
+**Mensaje**: Hay este tema, 16.66 x 3 es 49.98 que pasa oon el centavo perdido
+
 ## 2026-09-01 20:13:33
 **Modelo**: Claude Sonnet 4.6 (Thinking)
 **Mensaje**: Tenemos los siguientes ajustes Trabajar con MultiMoneda Todo al final se consolida en Dolares Quiero que primero armemos un plan de como se podria hacer, comencemos con el primer ajuste
@@ -97,3 +101,12 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 ## 2026-09-08 09:35:14
 **Modelo**: Claude Sonnet 4.6 (Thinking)
 **Mensaje**: hice un prueba de un gasto de 20 BOB lo tomo como 2.87 Dolares, cosa que no concuerda y es incorrecto, revisa analiza y corrige
+
+## 2026-09-08 10:32:37
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Revisa si hay alguna actualizacion en el repo de github
+
+## 2026-09-08 10:39:26
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Si, incluye los cambios e integra correctamente, y algo mas que podes hacer es acomodar la Logica del centavo perdido (Digamos 100 entre 3 es 33.33 pero a uno le daba 33.34 que era el primero en entrar, El cambio es lo siguiente si todos tienen deudas iguales selecciona al azar de los que se divide la cuenta otro caso si no son iguales el centavo se va al que debe mas de los que se divide -No podes darle el centavo extra al que debe mas pero no participo en el pago- y otro punto es dividir en porcentaje digamos o dividimos en parte iguales o alguien quiera pagar mas o menos, y otra cosa mas es que exista alguien que quiera pagar algo por su cuenta y no se toma en cuenta a deber, Investigar todo eso)
+
