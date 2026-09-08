@@ -59,7 +59,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col transition-colors">
+    <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col transition-colors">
       {/* Top bar */}
       <div className="flex justify-between items-center px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-card)]">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">

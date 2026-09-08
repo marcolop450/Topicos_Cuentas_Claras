@@ -23,6 +23,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Coins,
+  UserMinus,
 } from 'lucide-react';
 import { Navbar, ConfirmModal, FormError, useConfirmModal } from './components';
 import { useAuth } from './hooks/useAuth';
@@ -645,8 +646,12 @@ export default function CuentaDetailPage() {
   async function handleAddParticipant(e: React.FormEvent) {
     e.preventDefault();
     setAddPartError(null);
+    if (!isOwner) {
+      setAddPartError('Solo el organizador de la sala puede registrar invitados.');
+      return;
+    }
     if (!newPartName.trim()) {
-      setAddPartError('Ingresa un nombre.');
+      setAddPartError('Ingresa un nombre para el invitado.');
       return;
     }
     try {
@@ -661,6 +666,90 @@ export default function CuentaDetailPage() {
     } catch (err: any) {
       setAddPartError(err.message || 'Error al agregar participante.');
     }
+  }
+
+  async function handleExpelParticipant(part: Participant) {
+    if (!isOwner) return;
+    if (part.user_id === group?.owner_id) return;
+
+    const bal = balances.find(b => b.participantId === part.id);
+    const currentBalance = bal ? bal.balance : 0;
+    const hasBalance = Math.abs(currentBalance) > 0.01;
+
+    const hasPending = settlementRecords.some(
+      s => s.status === 'PENDING' && (s.from_id === part.id || s.to_id === part.id)
+    );
+
+    if (hasBalance) {
+      showConfirm(
+        'Expulsión Bloqueada',
+        `No es posible expulsar a ${part.name}: tiene un saldo pendiente de ${formatUSD(
+          Math.abs(currentBalance)
+        )} (${currentBalance > 0 ? 'se le debe dinero' : 'debe dinero'}). Todos los saldos deben estar en $0.00 antes de expulsar a un miembro.`,
+        () => {},
+        'Entendido'
+      );
+      return;
+    }
+
+    if (hasPending) {
+      showConfirm(
+        'Expulsión Bloqueada',
+        `No es posible expulsar a ${part.name}: tiene transacciones de pago pendientes de confirmación. Primero confirma o rechaza esos pagos en la pestaña Liquidación.`,
+        () => {},
+        'Entendido'
+      );
+      return;
+    }
+
+    showConfirm(
+      'Expulsar Participante',
+      `¿Confirmas la expulsión de ${part.name} de la sala? Su balance está saldado ($0.00) y no tiene deudas pendientes.`,
+      async () => {
+        try {
+          // 1. Si es usuario registrado, remover de group_members
+          if (part.user_id && group?.id) {
+            await supabase
+              .from('group_members')
+              .delete()
+              .eq('group_id', group.id)
+              .eq('user_id', part.user_id);
+          }
+
+          // 2. Intentar eliminar de participants
+          const { error } = await supabase.from('participants').delete().eq('id', part.id);
+
+          if (error) {
+            // Si falla por clave foránea (por historial de gastos ya saldados)
+            if (error.code === '23503' || error.message?.includes('foreign key')) {
+              if (part.user_id) {
+                await supabase
+                  .from('participants')
+                  .update({ user_id: null, name: `${part.name} (Expulsado)` })
+                  .eq('id', part.id);
+                setParticipants(
+                  participants.map(p =>
+                    p.id === part.id ? { ...p, user_id: null, name: `${part.name} (Expulsado)` } : p
+                  )
+                );
+              } else {
+                setAddPartError(
+                  `No se puede eliminar completamente a ${part.name} porque figura en el historial de gastos pasados, pero su saldo permanece en $0.00.`
+                );
+                return;
+              }
+            } else {
+              throw error;
+            }
+          } else {
+            setParticipants(participants.filter(p => p.id !== part.id));
+          }
+        } catch (err: any) {
+          setAddPartError('Error al expulsar participante: ' + (err.message || err));
+        }
+      },
+      'Expulsar'
+    );
   }
 
   // Cálculos reactivos
@@ -1427,23 +1516,29 @@ export default function CuentaDetailPage() {
                 </p>
               </div>
 
-              {/* Formulario rápido para agregar participante local */}
-              <form onSubmit={handleAddParticipant} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newPartName}
-                  onChange={e => setNewPartName(e.target.value)}
-                  placeholder="Nombre de participante..."
-                  className="px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all btn-press flex items-center gap-1 shrink-0"
-                >
-                  <Plus size={14} />
-                  <span>Agregar</span>
-                </button>
-              </form>
+              {/* Solo el admin (organizador) puede registrar participantes invitados */}
+              {isOwner ? (
+                <form onSubmit={handleAddParticipant} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newPartName}
+                    onChange={e => setNewPartName(e.target.value)}
+                    placeholder="Nombre de invitado..."
+                    className="px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-[var(--text-muted)]"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all btn-press flex items-center gap-1 shrink-0"
+                  >
+                    <Plus size={14} />
+                    <span>Agregar Invitado</span>
+                  </button>
+                </form>
+              ) : (
+                <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] border border-[var(--border)] px-3 py-1.5 rounded-xl font-medium">
+                  Solo el organizador puede agregar invitados
+                </div>
+              )}
             </div>
 
             {addPartError && <FormError message={addPartError} />}
@@ -1454,35 +1549,64 @@ export default function CuentaDetailPage() {
                 const isZero = !bal || Math.abs(bal.balance) < 0.01;
                 const isPositive = bal && bal.balance > 0.01;
                 const isMemberOwner = part.user_id === group?.owner_id;
+                const hasPending = settlementRecords.some(
+                  s => s.status === 'PENDING' && (s.from_id === part.id || s.to_id === part.id)
+                );
+                const hasDebt = !isZero || hasPending;
 
                 return (
                   <div
                     key={part.id}
                     className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] hover:shadow-sm transition-all flex flex-col justify-between gap-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${getAvatarColor(
-                          part.name
-                        )} text-white font-bold text-xs flex items-center justify-center shrink-0`}
-                      >
-                        {getInitials(part.name)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
-                            {part.name}
-                          </h4>
-                          {part.user_id === user?.id && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 font-bold">
-                              Tú
-                            </span>
-                          )}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${getAvatarColor(
+                            part.name
+                          )} text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs`}
+                        >
+                          {getInitials(part.name)}
                         </div>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                          {isMemberOwner ? 'Organizador' : part.user_id ? 'Usuario Registrado' : 'Invitado'}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                              {part.name}
+                            </h4>
+                            {part.user_id === user?.id && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 font-bold">
+                                Tú
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                            {isMemberOwner ? 'Organizador' : part.user_id ? 'Usuario Registrado' : 'Invitado'}
+                          </p>
+                        </div>
                       </div>
+
+                      {/* Botón expulsar exclusivo para el Admin y solo si no hay deudas */}
+                      {isOwner && !isMemberOwner && (
+                        <button
+                          type="button"
+                          onClick={() => handleExpelParticipant(part)}
+                          title={
+                            hasDebt
+                              ? 'No se puede expulsar: tiene saldo o pagos pendientes'
+                              : `Expulsar a ${part.name}`
+                          }
+                          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all shrink-0 ${
+                            hasDebt
+                              ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] opacity-60 hover:opacity-100 cursor-pointer'
+                              : 'bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 btn-press'
+                          }`}
+                        >
+                          <UserMinus size={13} />
+                          <span className="text-[11px] font-bold">
+                            {hasDebt ? 'Con Deuda' : 'Expulsar'}
+                          </span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-xs">
@@ -1871,6 +1995,7 @@ export default function CuentaDetailPage() {
           isOpen={modal.isOpen}
           title={modal.title}
           message={modal.message}
+          confirmLabel={modal.confirmLabel}
           onConfirm={modal.onConfirm}
           onCancel={closeConfirm}
         />

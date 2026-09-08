@@ -140,7 +140,7 @@ export default function CuentasPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
+      <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
         <Navbar backLabel="Inicio" backTo="/" userName={userName} onSignOut={signOut} />
         <div className="p-8 text-center text-[var(--text-muted)]">Cargando...</div>
       </div>
@@ -148,7 +148,7 @@ export default function CuentasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)] transition-colors">
+    <div className="min-h-screen bg-[var(--bg-primary)] transition-colors">
       <Navbar backLabel="Inicio" backTo="/" userName={userName} onSignOut={signOut} />
       <ConfirmModal isOpen={modal.isOpen} title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onCancel={closeConfirm} />
       <JoinModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={handleJoinByCode} />

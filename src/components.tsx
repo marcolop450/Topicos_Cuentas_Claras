@@ -221,13 +221,35 @@ export function FormError({ message }: { message: string | null }) {
 
 /* ===== CONFIRM MODAL HOOK ===== */
 export function useConfirmModal() {
-  const [modal, setModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', confirmLabel: 'Confirmar', onConfirm: () => {} });
 
-  function showConfirm(title: string, message: string, onConfirm: () => void) {
-    setModal({ isOpen: true, title, message, onConfirm: () => { onConfirm(); setModal(prev => ({ ...prev, isOpen: false })); } });
+  function showConfirm(
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmLabel: string = 'Confirmar'
+  ) {
+    setModal({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel,
+      onConfirm: () => {
+        onConfirm();
+        setModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   }
 
-  function closeConfirm() { setModal(prev => ({ ...prev, isOpen: false })); }
+  function closeConfirm() {
+    setModal(prev => ({ ...prev, isOpen: false }));
+  }
 
   return { modal, showConfirm, closeConfirm };
 }
