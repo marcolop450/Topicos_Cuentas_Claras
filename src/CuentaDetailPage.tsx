@@ -61,6 +61,29 @@ function getAvatarColor(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+function getCurrencyBadgeClass(currency: string): string {
+  switch ((currency || 'BOB').toUpperCase()) {
+    case 'USD':
+      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25';
+    case 'BOB':
+      return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25';
+    case 'EUR':
+      return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25';
+    case 'ARS':
+      return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25';
+    case 'BRL':
+      return 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/25';
+    case 'CLP':
+      return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25';
+    case 'PEN':
+      return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25';
+    case 'COP':
+      return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/25';
+    default:
+      return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/25';
+  }
+}
+
 export default function CuentaDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -1150,10 +1173,13 @@ export default function CuentaDetailPage() {
                             <Receipt size={18} />
                           </div>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
                                 {expense.description}
                               </h4>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border shrink-0 ${getCurrencyBadgeClass(expense.currency || 'BOB')}`}>
+                                {expense.currency || 'BOB'}
+                              </span>
                               {isPersonal ? (
                                 <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0">
                                   Personal
