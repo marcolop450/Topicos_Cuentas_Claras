@@ -1477,6 +1477,64 @@ export default function CuentaDetailPage() {
                 Posición neta de cada participante tras registrar gastos y pagos
               </p>
 
+              {/* Gráfico visual de balances relativos */}
+              {balances.some(b => Math.abs(b.balance) > 0.01) && (
+                <div className="mb-5 p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+                  <div className="text-xs font-semibold text-[var(--text-secondary)] mb-3 flex items-center justify-between">
+                    <span>Comparativa Visual de Posición</span>
+                    <span className="text-[10px] text-[var(--text-muted)]">Verde = A favor · Rojo = Deuda</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {balances.map(b => {
+                      const maxVal = Math.max(...balances.map(x => Math.abs(x.balance)), 0.01);
+                      const barWidth = Math.min(100, Math.round((Math.abs(b.balance) / maxVal) * 100));
+                      const isPositive = b.balance > 0.01;
+                      const isNegative = b.balance < -0.01;
+
+                      return (
+                        <div key={b.participantId} className="flex items-center gap-2.5 sm:gap-3 text-xs">
+                          <span className="w-20 sm:w-28 truncate font-medium text-[var(--text-primary)] text-right shrink-0">
+                            {b.name}
+                          </span>
+                          <div className="flex-1 h-3 rounded-full bg-[var(--bg-primary)] border border-[var(--border)] overflow-hidden flex items-center">
+                            {isPositive && (
+                              <div
+                                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                            )}
+                            {isNegative && (
+                              <div
+                                className="h-full rounded-full bg-rose-500 transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                            )}
+                            {!isPositive && !isNegative && (
+                              <div className="h-full w-2 bg-[var(--text-muted)] opacity-40 rounded-full mx-auto" />
+                            )}
+                          </div>
+                          <span
+                            className={`w-16 sm:w-20 text-right font-mono font-bold shrink-0 text-[11px] ${
+                              isPositive
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : isNegative
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-[var(--text-muted)]'
+                            }`}
+                          >
+                            {isPositive
+                              ? `+${formatUSD(b.balance)}`
+                              : isNegative
+                              ? `-${formatUSD(Math.abs(b.balance))}`
+                              : '$ 0.00'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {balances.map(b => {
                   const part = participants.find(p => p.id === b.participantId);
