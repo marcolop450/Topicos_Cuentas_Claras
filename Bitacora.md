@@ -155,6 +155,11 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: y la BD?
 
+## 2026-09-08 12:52:06
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Esto que sea un Modal y de paso arreglar las animaciones
+
+
 
 
 

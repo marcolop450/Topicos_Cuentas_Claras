@@ -82,7 +82,7 @@ export default function CuentaDetailPage() {
   // Navegación de pestañas
   const [activeTab, setActiveTab] = useState<'expenses' | 'settlement' | 'participants'>('expenses');
 
-  // Formulario de gastos
+  // Modal de formulario de gastos
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -770,7 +770,7 @@ export default function CuentaDetailPage() {
         {/* TOP STATS CARDS */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-6">
           {/* Card 1: Total Gastado */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5">
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between text-xs text-[var(--text-muted)] font-medium mb-1">
               <span>Total Gastado (USD)</span>
               <Coins size={16} className="text-indigo-500" />
@@ -785,7 +785,7 @@ export default function CuentaDetailPage() {
 
           {/* Card 2: Tu Posición Neta */}
           <div
-            className={`border rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5 ${
+            className={`border rounded-2xl p-4.5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md ${
               !myBalance || Math.abs(myBalance.balance) < 0.01
                 ? 'bg-[var(--bg-card)] border-[var(--border)]'
                 : myBalance.balance > 0
@@ -828,7 +828,7 @@ export default function CuentaDetailPage() {
           </div>
 
           {/* Card 3: Participantes */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-transform hover:-translate-y-0.5">
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4.5 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between text-xs text-[var(--text-muted)] font-medium mb-1">
               <span>Participantes</span>
               <Users size={16} className="text-amber-500" />
@@ -877,7 +877,7 @@ export default function CuentaDetailPage() {
             </div>
             <button
               onClick={() => setActiveTab('settlement')}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs transition-colors self-end sm:self-auto shrink-0 shadow-xs"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs transition-colors self-end sm:self-auto shrink-0 shadow-xs btn-press"
             >
               Revisar en Liquidación
             </button>
@@ -953,267 +953,14 @@ export default function CuentaDetailPage() {
                 </p>
               </div>
 
-              {!isExpenseFormOpen && (
-                <button
-                  onClick={handleStartAddExpense}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all btn-press"
-                >
-                  <Plus size={16} />
-                  <span>Nuevo Gasto</span>
-                </button>
-              )}
-            </div>
-
-            {/* FORMULARIO DE GASTO (ACORDEON / EXPANDIBLE) */}
-            {isExpenseFormOpen && (
-              <form
-                onSubmit={handleSaveExpense}
-                className="bg-[var(--bg-card)] border border-indigo-500/30 rounded-2xl p-5 sm:p-6 shadow-md space-y-5 animate-scale-in"
+              <button
+                onClick={handleStartAddExpense}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all btn-press"
               >
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                    <Receipt size={18} className="text-indigo-500" />
-                    <span>{editingExpenseId ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</span>
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={resetExpenseForm}
-                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* BLOQUE 1: MONTO Y MONEDA */}
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
-                    ¿Cuánto se pagó?
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-2 relative">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={amount}
-                        onChange={e => setAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full px-4 py-3 text-lg font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                        required
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <select
-                        value={currency}
-                        onChange={e => setCurrency(e.target.value)}
-                        className="w-full px-3 py-3 text-sm font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                      >
-                        {SUPPORTED_CURRENCIES.map(c => (
-                          <option key={c} value={c}>
-                            {c} ({CURRENCY_SYMBOLS[c]})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {amount && parseFloat(amount) > 0 && currency !== 'USD' && (
-                    <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-                      Equivalente: ≈ <strong className="text-[var(--text-primary)]">{formatUSD(toUSD(parseFloat(amount), currency, rates))}</strong> (Tasa: {rates[currency]?.toFixed(2)} {currency}/USD)
-                    </p>
-                  )}
-                </div>
-
-                {/* BLOQUE 2: CONCEPTO Y NOTAS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
-                      Descripción / Concepto
-                    </label>
-                    <input
-                      type="text"
-                      value={description}
-                      onChange={e => setDescription(e.target.value)}
-                      placeholder="Ej. Cena en restaurante, Uber, Supermercado..."
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
-                      Notas adicionales (opcional)
-                    </label>
-                    <input
-                      type="text"
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                      placeholder="Detalles, número de factura..."
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* BLOQUE 3: QUIÉN PAGÓ */}
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
-                    ¿Quién pagó la cuenta?
-                  </label>
-                  <select
-                    value={payerId}
-                    onChange={e => setPayerId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  >
-                    <option value="">Selecciona al pagador...</option>
-                    {participants.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.user_id === user?.id ? '(Tú)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* BLOQUE 4: MODO DE DIVISION */}
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
-                    ¿Cómo se divide?
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { mode: 'EQUAL', label: 'Partes Iguales', desc: 'Centavo perdido exacto' },
-                      { mode: 'PERCENTAGE', label: 'Porcentajes %', desc: 'Suma debe ser 100%' },
-                      { mode: 'CUSTOM', label: 'Monto Fijo', desc: 'Monto exacto por persona' },
-                      { mode: 'PERSONAL', label: 'Gasto Personal', desc: 'Por su cuenta (sin deuda)' },
-                    ].map(item => (
-                      <button
-                        key={item.mode}
-                        type="button"
-                        onClick={() => setSplitMode(item.mode as SplitMode)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          splitMode === item.mode
-                            ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                            : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
-                        }`}
-                      >
-                        <div className="font-bold text-xs">{item.label}</div>
-                        <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{item.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* BLOQUE 5: SELECCION DE PARTICIPANTES O VALORES */}
-                {splitMode !== 'PERSONAL' && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-bold text-[var(--text-secondary)]">
-                        Participantes incluidos ({selectedParticipants.length}/{participants.length})
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (allSelected) setSelectedParticipants([]);
-                          else setSelectedParticipants(participants.map(p => p.id));
-                        }}
-                        className="text-xs text-indigo-500 hover:underline font-semibold"
-                      >
-                        {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {participants.map(p => {
-                        const isSelected = selectedParticipants.includes(p.id);
-                        return (
-                          <div
-                            key={p.id}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
-                              isSelected
-                                ? 'bg-[var(--bg-secondary)] border-indigo-500/40'
-                                : 'bg-[var(--bg-primary)] border-[var(--border)] opacity-60'
-                            }`}
-                          >
-                            <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={e => {
-                                  if (e.target.checked) {
-                                    setSelectedParticipants([...selectedParticipants, p.id]);
-                                  } else {
-                                    setSelectedParticipants(selectedParticipants.filter(id => id !== p.id));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <div
-                                className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarColor(
-                                  p.name
-                                )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
-                              >
-                                {getInitials(p.name)}
-                              </div>
-                              <span className="text-xs font-medium text-[var(--text-primary)] truncate">
-                                {p.name} {p.id === payerId ? '(Pagador)' : ''}
-                              </span>
-                            </label>
-
-                            {/* Inputs adicionales si es % o Custom */}
-                            {isSelected && splitMode === 'PERCENTAGE' && (
-                              <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  value={customShares[p.id] || ''}
-                                  onChange={e =>
-                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
-                                  }
-                                  placeholder="%"
-                                  className="w-16 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
-                                />
-                                <span className="text-xs text-[var(--text-muted)]">%</span>
-                              </div>
-                            )}
-
-                            {isSelected && splitMode === 'CUSTOM' && (
-                              <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={customShares[p.id] || ''}
-                                  onChange={e =>
-                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
-                                  }
-                                  placeholder="0.00"
-                                  className="w-20 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
-                                />
-                                <span className="text-[11px] text-[var(--text-muted)] font-mono">{currency}</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* BOTONES DE ACCION */}
-                <div className="flex justify-end gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={resetExpenseForm}
-                    className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)] transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all btn-press"
-                  >
-                    {editingExpenseId ? 'Guardar Cambios' : 'Añadir Gasto'}
-                  </button>
-                </div>
-              </form>
-            )}
+                <Plus size={16} />
+                <span>Nuevo Gasto</span>
+              </button>
+            </div>
 
             {/* LISTA DE GASTOS */}
             {expenses.length === 0 ? (
@@ -1243,7 +990,7 @@ export default function CuentaDetailPage() {
                   return (
                     <div
                       key={expense.id}
-                      className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] transition-all flex items-center justify-between gap-4"
+                      className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] hover:shadow-md transition-all flex items-center justify-between gap-4"
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
                         <div className="w-10 h-10 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-indigo-500 shrink-0">
@@ -1375,7 +1122,7 @@ export default function CuentaDetailPage() {
                     return (
                       <div
                         key={idx}
-                        className="p-4 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-[var(--text-muted)]"
+                        className="p-4 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-[var(--text-muted)] hover:shadow-sm"
                       >
                         {/* Flujo Deudor -> Monto -> Acreedor */}
                         <div className="flex items-center gap-3 min-w-0">
@@ -1446,7 +1193,7 @@ export default function CuentaDetailPage() {
                           ) : isOwner ? (
                             <button
                               onClick={() => openSettleModal(t.from_id, t.to_id, t.amount, 'PAYMENT')}
-                              className="px-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
+                              className="px-3 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all btn-press"
                             >
                               Gestionar Pago
                             </button>
@@ -1499,13 +1246,13 @@ export default function CuentaDetailPage() {
                               <>
                                 <button
                                   onClick={() => handleConfirmPayment(st.id)}
-                                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors"
+                                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors btn-press"
                                 >
                                   Confirmar cobro
                                 </button>
                                 <button
                                   onClick={() => handleRejectPayment(st.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 font-semibold text-xs transition-colors"
+                                  className="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 font-semibold text-xs transition-colors btn-press"
                                 >
                                   Rechazar
                                 </button>
@@ -1630,7 +1377,7 @@ export default function CuentaDetailPage() {
                             </span>
                             <button
                               onClick={() => handleUndoSettlement(st)}
-                              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors btn-press"
                               title="Deshacer este registro (reabrir deuda)"
                             >
                               <RotateCcw size={13} />
@@ -1711,7 +1458,7 @@ export default function CuentaDetailPage() {
                 return (
                   <div
                     key={part.id}
-                    className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] transition-all flex flex-col justify-between gap-3"
+                    className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs hover:border-[var(--text-muted)] hover:shadow-sm transition-all flex flex-col justify-between gap-3"
                   >
                     <div className="flex items-center gap-3">
                       <div
@@ -1760,6 +1507,259 @@ export default function CuentaDetailPage() {
         )}
 
         {/* ========================================================= */}
+        {/* MODAL PARA REGISTRAR O EDITAR GASTO                      */}
+        {/* ========================================================= */}
+        {isExpenseFormOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-fade-in">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3 sticky top-0 bg-[var(--bg-card)] z-10">
+                <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <Receipt size={20} className="text-indigo-500" />
+                  <span>{editingExpenseId ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={resetExpenseForm}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveExpense} className="space-y-4">
+                {/* BLOQUE 1: MONTO Y MONEDA */}
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Cuánto se pagó?
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2 relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={amount}
+                        onChange={e => setAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-4 py-2.5 text-lg font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={currency}
+                        onChange={e => setCurrency(e.target.value)}
+                        className="w-full px-3 py-3 text-sm font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      >
+                        {SUPPORTED_CURRENCIES.map(c => (
+                          <option key={c} value={c}>
+                            {c} ({CURRENCY_SYMBOLS[c]})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {amount && parseFloat(amount) > 0 && currency !== 'USD' && (
+                    <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
+                      Equivalente: ≈ <strong className="text-[var(--text-primary)]">{formatUSD(toUSD(parseFloat(amount), currency, rates))}</strong> (Tasa: {rates[currency]?.toFixed(2)} {currency}/USD)
+                    </p>
+                  )}
+                </div>
+
+                {/* BLOQUE 2: CONCEPTO Y NOTAS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                      Descripción / Concepto
+                    </label>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="Ej. Cena, Supermercado..."
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                      Notas adicionales (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Factura, detalles..."
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* BLOQUE 3: QUIÉN PAGÓ */}
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Quién pagó la cuenta?
+                  </label>
+                  <select
+                    value={payerId}
+                    onChange={e => setPayerId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:ring-2 focus:ring-indigo-500 outline-none"
+                    required
+                  >
+                    <option value="">Selecciona al pagador...</option>
+                    {participants.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.user_id === user?.id ? '(Tú)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* BLOQUE 4: MODO DE DIVISION */}
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5">
+                    ¿Cómo se divide?
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { mode: 'EQUAL', label: 'Partes Iguales', desc: 'Centavo exacto' },
+                      { mode: 'PERCENTAGE', label: 'Porcentajes %', desc: 'Suma 100%' },
+                      { mode: 'CUSTOM', label: 'Monto Fijo', desc: 'Monto exacto' },
+                      { mode: 'PERSONAL', label: 'Gasto Personal', desc: 'Por su cuenta' },
+                    ].map(item => (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        onClick={() => setSplitMode(item.mode as SplitMode)}
+                        className={`p-2.5 rounded-xl border text-left transition-all btn-press ${
+                          splitMode === item.mode
+                            ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                            : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
+                        }`}
+                      >
+                        <div className="font-bold text-xs">{item.label}</div>
+                        <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{item.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* BLOQUE 5: SELECCION DE PARTICIPANTES O VALORES */}
+                {splitMode !== 'PERSONAL' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-[var(--text-secondary)]">
+                        Participantes incluidos ({selectedParticipants.length}/{participants.length})
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (allSelected) setSelectedParticipants([]);
+                          else setSelectedParticipants(participants.map(p => p.id));
+                        }}
+                        className="text-xs text-indigo-500 hover:underline font-semibold"
+                      >
+                        {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {participants.map(p => {
+                        const isSelected = selectedParticipants.includes(p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+                              isSelected
+                                ? 'bg-[var(--bg-secondary)] border-indigo-500/40'
+                                : 'bg-[var(--bg-primary)] border-[var(--border)] opacity-60'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedParticipants([...selectedParticipants, p.id]);
+                                  } else {
+                                    setSelectedParticipants(selectedParticipants.filter(id => id !== p.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <div
+                                className={`w-6 h-6 rounded-full bg-gradient-to-tr ${getAvatarColor(
+                                  p.name
+                                )} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                              >
+                                {getInitials(p.name)}
+                              </div>
+                              <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                                {p.name} {p.id === payerId ? '(Pagador)' : ''}
+                              </span>
+                            </label>
+
+                            {isSelected && splitMode === 'PERCENTAGE' && (
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={customShares[p.id] || ''}
+                                  onChange={e =>
+                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
+                                  }
+                                  placeholder="%"
+                                  className="w-16 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
+                                />
+                                <span className="text-xs text-[var(--text-muted)]">%</span>
+                              </div>
+                            )}
+
+                            {isSelected && splitMode === 'CUSTOM' && (
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={customShares[p.id] || ''}
+                                  onChange={e =>
+                                    setCustomShares({ ...customShares, [p.id]: e.target.value })
+                                  }
+                                  placeholder="0.00"
+                                  className="w-20 px-2 py-1 text-xs font-bold rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-right"
+                                />
+                                <span className="text-[11px] text-[var(--text-muted)] font-mono">{currency}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTONES DE ACCION */}
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={resetExpenseForm}
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)] transition-colors btn-press"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all btn-press"
+                  >
+                    {editingExpenseId ? 'Guardar Cambios' : 'Añadir Gasto'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
         {/* MODAL PARA LIQUIDAR O PERDONAR DEUDA                      */}
         {/* ========================================================= */}
         {settleModalOpen && (() => {
@@ -1767,7 +1767,7 @@ export default function CuentaDetailPage() {
           const isDebtorInModal = user && debtorPart?.user_id === user.id;
 
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-150">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-fade-in">
               <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-in">
                 <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
                   <h3 className="text-base font-bold text-[var(--text-primary)]">
@@ -1775,7 +1775,7 @@ export default function CuentaDetailPage() {
                   </h3>
                   <button
                     onClick={() => setSettleModalOpen(false)}
-                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg"
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg transition-colors"
                   >
                     <X size={18} />
                   </button>
@@ -1788,7 +1788,7 @@ export default function CuentaDetailPage() {
                       <button
                         type="button"
                         onClick={() => setSettleType('PAYMENT')}
-                        className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
+                        className={`py-2 rounded-xl text-xs font-bold border transition-colors btn-press ${
                           settleType === 'PAYMENT'
                             ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
                             : 'border-[var(--border)] text-[var(--text-secondary)]'
@@ -1799,7 +1799,7 @@ export default function CuentaDetailPage() {
                       <button
                         type="button"
                         onClick={() => setSettleType('FORGIVEN')}
-                        className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
+                        className={`py-2 rounded-xl text-xs font-bold border transition-colors btn-press ${
                           settleType === 'FORGIVEN'
                             ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300'
                             : 'border-[var(--border)] text-[var(--text-secondary)]'
@@ -1848,7 +1848,7 @@ export default function CuentaDetailPage() {
                     <button
                       type="button"
                       onClick={() => setSettleModalOpen(false)}
-                      className="px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)]"
+                      className="px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl border border-[var(--border)] transition-colors btn-press"
                     >
                       Cancelar
                     </button>

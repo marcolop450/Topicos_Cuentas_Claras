@@ -86,7 +86,7 @@ body {
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -97,25 +97,25 @@ body {
 @keyframes scaleIn {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.96) translateY(6px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 @keyframes pulseSubtle {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.04); opacity: 0.85; }
+  50% { transform: scale(1.03); opacity: 0.85; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.25s ease-out both;
+  animation: fadeIn 0.18s ease-out both;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-scale-in {
@@ -127,12 +127,12 @@ body {
 }
 
 .btn-press {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .btn-press:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
-.delay-100 { animation-delay: 60ms; }
-.delay-200 { animation-delay: 120ms; }
-.delay-300 { animation-delay: 180ms; }
+.delay-100 { animation-delay: 50ms; }
+.delay-200 { animation-delay: 100ms; }
+.delay-300 { animation-delay: 150ms; }
