@@ -796,9 +796,50 @@ export default function CuentaDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col items-center justify-center text-[var(--text-secondary)]">
-        <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm font-medium animate-pulse">Cargando sala y calculando balances...</p>
+      <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors pb-20">
+        <Navbar backLabel="Mis salas" backTo="/cuentas" onSignOut={signOut} />
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 animate-pulse">
+          {/* Header skeleton */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 mb-6 shadow-xs">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-[var(--border)] shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-5 w-48 bg-[var(--border)] rounded-lg" />
+                <div className="h-3 w-32 bg-[var(--border)] rounded-lg" />
+              </div>
+              <div className="h-8 w-24 bg-[var(--border)] rounded-xl hidden sm:block" />
+            </div>
+          </div>
+          {/* Stats cards skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-6">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs space-y-2">
+                <div className="h-3 w-24 bg-[var(--border)] rounded" />
+                <div className="h-7 w-32 bg-[var(--border)] rounded-lg" />
+                <div className="h-3 w-20 bg-[var(--border)] rounded" />
+              </div>
+            ))}
+          </div>
+          {/* Tab bar skeleton */}
+          <div className="flex gap-1.5 p-1.5 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)] mb-6">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="flex-1 h-10 bg-[var(--border)] rounded-xl" />
+            ))}
+          </div>
+          {/* Expense rows skeleton */}
+          <div className="space-y-2.5">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-[var(--border)] shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-40 bg-[var(--border)] rounded" />
+                  <div className="h-3 w-28 bg-[var(--border)] rounded" />
+                </div>
+                <div className="h-5 w-20 bg-[var(--border)] rounded shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
