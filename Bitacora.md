@@ -184,3 +184,27 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 
 
 
+
+## 2026-09-08 13:42:15
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora del skeleton Loader
+
+## 2026-09-08 13:45:50
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora agregando una barra de progreso que muestre el porcentaje de cada gasto respecto al total
+
+## 2026-09-08 13:53:10
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora añadiendo chips de colores para identificar cada moneda en los gastos
+
+## 2026-09-08 13:54:30
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora con un gráfico de barras horizontal comparativo de balances en la liquidación
+
+## 2026-09-08 13:55:20
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora agregando separador de miles a todos los montos de dinero
+
+## 2026-09-08 13:56:05
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: Quiero que realices una mejora en el diseño del encabezado de la sala añadiendo un patrón sutil y brillo ambiental
