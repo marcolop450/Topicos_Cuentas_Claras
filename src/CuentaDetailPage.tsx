@@ -422,6 +422,7 @@ export default function CuentaDetailPage() {
       '¿Seguro que deseas eliminar este gasto? Los balances de los participantes se recalcularan.',
       async () => {
         try {
+          await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
           const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
           if (error) throw error;
 

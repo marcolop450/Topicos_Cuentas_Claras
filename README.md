@@ -141,4 +141,9 @@ Eres un Señor en la Programacion se realizara un Proyecto App Web, Existen esta
 **Modelo**: Gemini 3.8 Flash (High)
 **Mensaje**: Toma la BD actual (schema con settlement_type y notes) podes rehacer y inicia
 
+## 2026-09-08 12:49:46
+**Modelo**: Gemini 3.8 Flash (High)
+**Mensaje**: y la BD?
+
+
 
